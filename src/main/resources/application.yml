@@ -1,1 +1,118 @@
-{}
+# =============================================================
+#  Rede Studio API — base configuration
+#  Profiles: %dev (local containers) | %master (AWS + Atlas)
+# =============================================================
+
+quarkus:
+  application:
+    name: rede-studio-api
+
+  http:
+    port: 8080
+    cors:
+      ~: true
+      origins: ${CORS_ORIGINS:http://localhost:5173}
+      methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+      headers: Content-Type,Authorization,Accept
+      exposed-headers: Content-Type,Authorization
+
+  mongodb:
+    connection-string: ${MONGODB_URI:mongodb://localhost:27017}
+    database: ${MONGODB_DATABASE:rede_studio_dev}
+
+  log:
+    level: INFO
+    console:
+      format: "%d{yyyy-MM-dd HH:mm:ss} %-5p [%c{2.}] (%t) %s%e%n"
+      json: false
+
+  smallrye-openapi:
+    path: /q/openapi
+    info-title: "Rede Studio API"
+    info-version: "1.0.0"
+    info-description: "API de gerenciamento de infraestrutura de rede corporativa"
+    security-scheme: jwt
+    security-scheme-name: BearerAuth
+    jwt-security-scheme-value: "Bearer {token}"
+
+  swagger-ui:
+    path: /q/swagger-ui
+    always-include: false
+
+mp:
+  jwt:
+    verify:
+      publickey:
+        location: ${JWT_PUBLIC_KEY_LOCATION:publicKey.pem}
+      issuer: ${JWT_ISSUER:https://redestudio.com.br}
+
+app:
+  jwt:
+    issuer: ${JWT_ISSUER:https://redestudio.com.br}
+    expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
+    private-key-location: ${JWT_PRIVATE_KEY_LOCATION:privateKey.pem}
+
+# =============================================================
+#  Profile: %dev — local Docker Compose
+# =============================================================
+"%dev":
+  quarkus:
+    mongodb:
+      connection-string: mongodb://mongo:27017
+      database: rede_studio_dev
+
+    log:
+      level: DEBUG
+      console:
+        format: "%d{HH:mm:ss} %-5p [%c{2.}] %s%e%n"
+
+    swagger-ui:
+      always-include: true
+
+  mp:
+    jwt:
+      verify:
+        publickey:
+          location: file:/run/secrets/jwt/publicKey.pem
+        issuer: https://redestudio.local
+
+  app:
+    jwt:
+      issuer: https://redestudio.local
+      expiration-seconds: 86400
+      private-key-location: /run/secrets/jwt/privateKey.pem
+
+# =============================================================
+#  Profile: %master — AWS + MongoDB Atlas
+# =============================================================
+"%master":
+  quarkus:
+    mongodb:
+      connection-string: ${MONGODB_URI}
+      database: ${MONGODB_DATABASE}
+
+    log:
+      level: WARN
+      console:
+        json: true
+
+    http:
+      cors:
+        origins: ${CORS_ORIGINS}
+
+    swagger-ui:
+      always-include: false
+
+  mp:
+    jwt:
+      verify:
+        publickey:
+          location: ${JWT_PUBLIC_KEY_LOCATION}
+        issuer: ${JWT_ISSUER}
+
+  app:
+    jwt:
+      issuer: ${JWT_ISSUER}
+      expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
+      private-key-location: ${JWT_PRIVATE_KEY_LOCATION}
+

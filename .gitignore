@@ -28,6 +28,18 @@ nb-configuration.xml
 # OSX
 .DS_Store
 
+# Environment / Secrets
+.env.dev
+.env.master
+secrets/
+*.pem
+*.key
+*.p12
+*.jks
+
+# Keep templates
+!.env.master.example
+
 # Vim
 *.swp
 *.swo

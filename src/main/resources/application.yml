@@ -9,6 +9,8 @@ quarkus:
 
   http:
     port: 8080
+    auth:
+      proactive: false
     cors:
       ~: true
       origins: ${CORS_ORIGINS:http://localhost:5173}
@@ -46,11 +48,22 @@ mp:
         location: ${JWT_PUBLIC_KEY_LOCATION:publicKey.pem}
       issuer: ${JWT_ISSUER:https://redestudio.com.br}
 
+smallrye:
+  jwt:
+    sign:
+      key:
+        location: ${JWT_PRIVATE_KEY_LOCATION:privateKey.pem}
+
 app:
   jwt:
     issuer: ${JWT_ISSUER:https://redestudio.com.br}
     expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
     private-key-location: ${JWT_PRIVATE_KEY_LOCATION:privateKey.pem}
+
+  admin:
+    email: ${ADMIN_EMAIL:john.doe@redestudio.local}
+    username: ${ADMIN_USERNAME:johndoe}
+    password: ${ADMIN_PASSWORD:Admin@2024!}
 
 # =============================================================
 #  Profile: %dev — local Docker Compose
@@ -65,6 +78,13 @@ app:
       level: DEBUG
       console:
         format: "%d{HH:mm:ss} %-5p [%c{2.}] %s%e%n"
+      category:
+        "io.quarkus":
+          level: INFO
+        "org.mongodb.driver":
+          level: WARN
+        "com.mongodb":
+          level: WARN
 
     swagger-ui:
       always-include: true
@@ -75,6 +95,12 @@ app:
         publickey:
           location: file:/run/secrets/jwt/publicKey.pem
         issuer: https://redestudio.local
+
+  smallrye:
+    jwt:
+      sign:
+        key:
+          location: /run/secrets/jwt/privateKey.pem
 
   app:
     jwt:
@@ -110,9 +136,20 @@ app:
           location: ${JWT_PUBLIC_KEY_LOCATION}
         issuer: ${JWT_ISSUER}
 
+  smallrye:
+    jwt:
+      sign:
+        key:
+          location: ${JWT_PRIVATE_KEY_LOCATION}
+
   app:
     jwt:
       issuer: ${JWT_ISSUER}
       expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
       private-key-location: ${JWT_PRIVATE_KEY_LOCATION}
+
+    admin:
+      email: ${ADMIN_EMAIL}
+      username: ${ADMIN_USERNAME}
+      password: ${ADMIN_PASSWORD}
 

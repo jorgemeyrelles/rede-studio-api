@@ -33,13 +33,11 @@ quarkus:
     info-title: "Rede Studio API"
     info-version: "1.0.0"
     info-description: "API de gerenciamento de infraestrutura de rede corporativa"
-    security-scheme: jwt
-    security-scheme-name: BearerAuth
-    jwt-security-scheme-value: "Bearer {token}"
+    auto-add-security: false
 
   swagger-ui:
     path: /q/swagger-ui
-    always-include: false
+    always-include: true   # habilitado em todos os perfis — desabilitado via %master abaixo
 
 mp:
   jwt:
@@ -100,13 +98,13 @@ app:
     jwt:
       sign:
         key:
-          location: /run/secrets/jwt/privateKey.pem
+          location: file:/run/secrets/jwt/privateKey.pem
 
   app:
     jwt:
       issuer: https://redestudio.local
       expiration-seconds: 86400
-      private-key-location: /run/secrets/jwt/privateKey.pem
+      private-key-location: file:/run/secrets/jwt/privateKey.pem
 
 # =============================================================
 #  Profile: %master — AWS + MongoDB Atlas

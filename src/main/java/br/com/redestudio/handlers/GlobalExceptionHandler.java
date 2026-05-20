@@ -4,7 +4,6 @@ import br.com.redestudio.dtos.response.ErrorResponse;
 import br.com.redestudio.exceptions.InvalidCredentialsException;
 import br.com.redestudio.exceptions.UnauthorizedException;
 import br.com.redestudio.exceptions.UserAlreadyExistsException;
-import jakarta.validation.ConstraintViolationException;
 import jakarta.ws.rs.NotAllowedException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Context;
@@ -14,8 +13,6 @@ import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 import org.jboss.logging.Logger;
-
-import java.util.stream.Collectors;
 
 /**
  * Centralised JAX-RS exception mapper.
@@ -57,14 +54,6 @@ public class GlobalExceptionHandler implements ExceptionMapper<Exception> {
 
         if (exception instanceof UnauthorizedException ex) {
             return build(Response.Status.UNAUTHORIZED, "UNAUTHORIZED", ex.getMessage(), path);
-        }
-
-        if (exception instanceof ConstraintViolationException ex) {
-            String message = ex.getConstraintViolations().stream()
-                    .map(v -> v.getPropertyPath() + ": " + v.getMessage())
-                    .sorted()
-                    .collect(Collectors.joining("; "));
-            return build(Response.Status.BAD_REQUEST, "VALIDATION_ERROR", message, path);
         }
 
         if (exception instanceof NotFoundException) {

@@ -21,7 +21,7 @@ openssl genrsa -out "$PRIVATE_KEY" 2048
 echo "[jwt-keygen] Extracting public key..."
 openssl rsa -in "$PRIVATE_KEY" -pubout -out "$PUBLIC_KEY"
 
-chmod 600 "$PRIVATE_KEY"
+chmod 644 "$PRIVATE_KEY"
 chmod 644 "$PUBLIC_KEY"
 
 echo "[jwt-keygen] Done."

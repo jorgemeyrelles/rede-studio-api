@@ -59,4 +59,14 @@ public class UserRepository implements PanacheMongoRepository<UserEntity> {
     public boolean existsByUsername(String username) {
         return count("username", username) > 0;
     }
+
+    /**
+     * Deletes the user with the given email address.
+     *
+     * @param email the email of the user to delete
+     * @return the number of documents deleted (0 if not found, 1 otherwise)
+     */
+    public long deleteByEmail(String email) {
+        return delete("email", email);
+    }
 }

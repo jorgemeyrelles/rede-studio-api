@@ -5,9 +5,10 @@ import br.com.redestudio.exceptions.UserAlreadyExistsException;
 import br.com.redestudio.repositories.UserRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import jakarta.ws.rs.NotFoundException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -34,10 +35,28 @@ public class UserService {
      * @param user fully populated {@link UserEntity} to persist
      * @return the persisted entity (id populated by MongoDB)
      */
-    @Transactional
     public UserEntity createUser(UserEntity user) {
         userRepository.persist(user);
         return user;
+    }
+
+    /**
+     * Returns all user documents from MongoDB.
+     *
+     * @return list of all {@link UserEntity} instances (may be empty)
+     */
+    public List<UserEntity> listAll() {
+        return userRepository.listAll();
+    }
+
+    /**
+     * Looks up a user by username.
+     *
+     * @param username the username to search for
+     * @return an {@link Optional} with the user, or empty if not found
+     */
+    public Optional<UserEntity> findByUsername(String username) {
+        return userRepository.findByUsername(username);
     }
 
     /**
@@ -77,10 +96,39 @@ public class UserService {
      * @param user the entity to update (must already have a valid {@code id})
      * @return the updated entity
      */
-    @Transactional
     public UserEntity updateUser(UserEntity user) {
         user.setUpdatedAt(Instant.now());
         userRepository.update(user);
         return user;
+    }
+
+    /**
+     * Changes the password of the user identified by email.
+     *
+     * @param email           the email of the user whose password will be changed
+     * @param newPasswordHash the BCrypt hash of the new password
+     * @return the updated entity
+     * @throws NotFoundException if no user with that email exists
+     */
+    public UserEntity changePassword(String email, String newPasswordHash) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NotFoundException("User not found with email: " + email));
+        user.setPasswordHash(newPasswordHash);
+        user.setUpdatedAt(Instant.now());
+        userRepository.update(user);
+        return user;
+    }
+
+    /**
+     * Deletes the user identified by email.
+     *
+     * @param email the email of the user to delete
+     * @throws NotFoundException if no user with that email exists
+     */
+    public void deleteByEmail(String email) {
+        long deleted = userRepository.deleteByEmail(email);
+        if (deleted == 0) {
+            throw new NotFoundException("User not found with email: " + email);
+        }
     }
 }

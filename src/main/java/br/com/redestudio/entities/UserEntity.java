@@ -2,6 +2,8 @@ package br.com.redestudio.entities;
 
 import br.com.redestudio.collections.CollectionNames;
 import io.quarkus.mongodb.panache.common.MongoEntity;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.bson.codecs.pojo.annotations.BsonId;
 import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.bson.types.ObjectId;
@@ -13,48 +15,48 @@ import java.util.Set;
  * MongoDB document representing a registered user.
  * Collection: {@value CollectionNames#USERS}
  *
+ * <p>{@code @Data} generates: getters, setters, equals, hashCode and toString.
+ * {@code @NoArgsConstructor} provides the explicit no-arg constructor required
+ * by the BSON codec for deserialization.
+ *
  * <p>Indexes created on startup (see StartupRunner):
  * <ul>
  *   <li>unique index on {@code email}</li>
  *   <li>unique index on {@code username}</li>
  * </ul>
  */
+@Data
+@NoArgsConstructor
 @MongoEntity(collection = CollectionNames.USERS)
 public class UserEntity {
 
     @BsonId
-    public ObjectId id;
+    private ObjectId id;
 
     @BsonProperty("username")
-    public String username;
+    private String username;
 
     @BsonProperty("email")
-    public String email;
+    private String email;
 
     @BsonProperty("password_hash")
-    public String passwordHash;
+    private String passwordHash;
 
     /**
      * Set of role strings assigned to this user (e.g. "USER", "ADMIN").
      * Used as MicroProfile JWT {@code groups} claim.
      */
     @BsonProperty("roles")
-    public Set<String> roles;
+    private Set<String> roles;
 
     @BsonProperty("active")
-    public boolean active;
+    private boolean active;
 
     @BsonProperty("created_at")
-    public Instant createdAt;
+    private Instant createdAt;
 
     @BsonProperty("updated_at")
-    public Instant updatedAt;
-
-    /**
-     * Required no-arg constructor for Panache / BSON codec.
-     */
-    public UserEntity() {
-    }
+    private Instant updatedAt;
 
     /**
      * Factory method for new user creation.
@@ -62,13 +64,14 @@ public class UserEntity {
      */
     public static UserEntity create(String username, String email, String passwordHash, Set<String> roles) {
         UserEntity user = new UserEntity();
-        user.username = username;
-        user.email = email;
-        user.passwordHash = passwordHash;
-        user.roles = roles;
-        user.active = true;
-        user.createdAt = Instant.now();
-        user.updatedAt = Instant.now();
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setPasswordHash(passwordHash);
+        user.setRoles(roles);
+        user.setActive(true);
+        user.setCreatedAt(Instant.now());
+        user.setUpdatedAt(Instant.now());
         return user;
     }
 }
+

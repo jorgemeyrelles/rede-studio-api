@@ -1,0 +1,31 @@
+# =============================================================
+#  terraform.tfvars — Valores de produção
+#  NÃO commite este arquivo (está no .gitignore).
+# =============================================================
+
+aws_region  = "us-east-2"
+environment = "prod"
+
+# VPC
+vpc_cidr            = "10.0.0.0/16"
+public_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
+availability_zones  = ["us-east-2a", "us-east-2b"]
+
+# ECS EC2 — t3.micro (free tier)
+ecs_instance_type = "t3.micro"
+ecs_min_capacity  = 1
+ecs_max_capacity  = 1
+ecs_desired_count = 1
+api_cpu           = 512
+api_memory        = 768
+
+# MongoDB Atlas (free tier M0)
+mongodb_database = "rede_studio_prod"
+
+# Aplicação
+jwt_issuer             = "https://api.redestudio.com"
+jwt_expiration_seconds = 86400
+cors_origins           = "https://redestudio.com,https://www.redestudio.com"
+
+# TLS — deixe vazio para HTTP (adicione ARN do ACM quando tiver domínio)
+certificate_arn = ""

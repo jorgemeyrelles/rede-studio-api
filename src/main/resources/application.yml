@@ -22,6 +22,12 @@ quarkus:
     connection-string: ${MONGODB_URI:mongodb://localhost:27017}
     database: ${MONGODB_DATABASE:rede_studio_dev}
 
+  redis:
+    hosts: ${REDIS_URL:redis://localhost:6379}
+
+  mailer:
+    from: ${MAIL_FROM:naoresponder@redestudio.com.br}
+
   log:
     level: INFO
     console:
@@ -45,6 +51,34 @@ mp:
       publickey:
         location: ${JWT_PUBLIC_KEY_LOCATION:publicKey.pem}
       issuer: ${JWT_ISSUER:https://redestudio.com.br}
+
+  messaging:
+    outgoing:
+      user-registration-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: user.registration
+          type: direct
+          durable: true
+        default-routing-key: user.registration
+    incoming:
+      user-registration-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: user.registration
+          durable: true
+        exchange:
+          name: user.registration
+          type: direct
+          durable: true
+        routing-keys: user.registration
+
+# Conexão global do conector RabbitMQ (compartilhada por todos os channels)
+rabbitmq-host: ${RABBITMQ_HOST:localhost}
+rabbitmq-port: ${RABBITMQ_PORT:5672}
+rabbitmq-username: ${RABBITMQ_USERNAME:guest}
+rabbitmq-password: ${RABBITMQ_PASSWORD:guest}
 
 smallrye:
   jwt:
@@ -72,6 +106,12 @@ app:
       connection-string: mongodb://mongo:27017
       database: rede_studio_dev
 
+    redis:
+      hosts: redis://redis:6379
+
+    mailer:
+      mock: true
+
     log:
       level: DEBUG
       console:
@@ -94,6 +134,11 @@ app:
           location: file:/run/secrets/jwt/publicKey.pem
         issuer: https://redestudio.local
 
+  rabbitmq-host: rabbitmq
+  rabbitmq-port: 5672
+  rabbitmq-username: redestudio
+  rabbitmq-password: dev_secret_change_me
+
   smallrye:
     jwt:
       sign:
@@ -115,6 +160,19 @@ app:
       connection-string: ${MONGODB_URI}
       database: ${MONGODB_DATABASE}
 
+    redis:
+      hosts: ${REDIS_URL}
+
+    mailer:
+      mock: false
+      from: ${MAIL_FROM}
+      host: ${MAIL_SMTP_HOST}
+      port: ${MAIL_SMTP_PORT:587}
+      username: ${MAIL_SMTP_USERNAME}
+      password: ${MAIL_SMTP_PASSWORD}
+      start-tls: REQUIRED
+      auth-methods: PLAIN
+
     log:
       level: WARN
       console:
@@ -133,6 +191,11 @@ app:
         publickey:
           location: ${JWT_PUBLIC_KEY_LOCATION}
         issuer: ${JWT_ISSUER}
+
+  rabbitmq-host: ${RABBITMQ_HOST}
+  rabbitmq-port: ${RABBITMQ_PORT:5672}
+  rabbitmq-username: ${RABBITMQ_USERNAME}
+  rabbitmq-password: ${RABBITMQ_PASSWORD}
 
   smallrye:
     jwt:

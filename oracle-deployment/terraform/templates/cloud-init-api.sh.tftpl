@@ -1,0 +1,266 @@
+#!/bin/bash
+#
+# cloud-init-api.sh — provisionamento da VM rede-studio-api (Bootstrap Oracle)
+#
+# Executado UMA UNICA VEZ no primeiro boot.
+# Logs: /var/log/rede-studio-bootstrap.log
+#
+set -euxo pipefail
+
+exec > >(tee /var/log/rede-studio-bootstrap.log) 2>&1
+
+echo "===== [0/8] Firewall local (iptables) ====="
+# Imagens Ubuntu da Oracle vem com iptables restrito por padrao (so libera
+# SSH) mesmo com a Security List da VCN ja liberando 80/443 -- sem isso o
+# nginx fica inalcancavel de fora mesmo escutando corretamente.
+iptables -I INPUT -p tcp --dport 80  -j ACCEPT
+iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+netfilter-persistent save 2>/dev/null || true
+
+echo "===== [1/8] Atualizacao do sistema ====="
+apt-get update -y
+apt-get upgrade -y
+apt-get install -y curl jq unzip openjdk-21-jre-headless docker.io docker-compose-v2 python3-pip
+
+systemctl enable --now docker
+
+echo "===== [2/8] Instalar OCI CLI (auth via instance principal) ====="
+pip3 install --break-system-packages --ignore-installed oci-cli
+
+echo "===== [3/8] Estrutura de diretorios ====="
+mkdir -p /opt/rede-studio/{secrets,app,logs,compose}
+useradd -r -s /usr/sbin/nologin -d /opt/rede-studio redestudio || true
+
+echo "===== [4/8] Buscar secrets do OCI Vault ====="
+oci secrets secret-bundle get \
+  --secret-id "${secret_id}" \
+  --region "${region}" \
+  --auth instance_principal \
+  --query 'data."secret-bundle-content".content' --raw-output \
+  | base64 -d > /opt/rede-studio/secrets/app.json
+
+MONGODB_URI=$(jq -r '.MONGODB_URI' /opt/rede-studio/secrets/app.json)
+jq -r '.JWT_PRIVATE_KEY_B64' /opt/rede-studio/secrets/app.json | base64 -d > /opt/rede-studio/secrets/privateKey.pem
+jq -r '.JWT_PUBLIC_KEY_B64'  /opt/rede-studio/secrets/app.json | base64 -d > /opt/rede-studio/secrets/publicKey.pem
+ADMIN_EMAIL=$(jq -r '.ADMIN_EMAIL'    /opt/rede-studio/secrets/app.json)
+ADMIN_USER=$(jq  -r '.ADMIN_USERNAME' /opt/rede-studio/secrets/app.json)
+ADMIN_PASS=$(jq  -r '.ADMIN_PASSWORD' /opt/rede-studio/secrets/app.json)
+RABBITMQ_USER=$(jq -r '.RABBITMQ_USERNAME' /opt/rede-studio/secrets/app.json)
+RABBITMQ_PASS=$(jq -r '.RABBITMQ_PASSWORD' /opt/rede-studio/secrets/app.json)
+MAIL_SMTP_USER=$(jq -r '.MAIL_SMTP_USERNAME' /opt/rede-studio/secrets/app.json)
+MAIL_SMTP_PASS=$(jq -r '.MAIL_SMTP_PASSWORD' /opt/rede-studio/secrets/app.json)
+GRAFANA_PROM_URL=$(jq -r '.GRAFANA_CLOUD_PROMETHEUS_URL' /opt/rede-studio/secrets/app.json)
+GRAFANA_PROM_USER=$(jq -r '.GRAFANA_CLOUD_PROMETHEUS_USERNAME' /opt/rede-studio/secrets/app.json)
+GRAFANA_PROM_PASS=$(jq -r '.GRAFANA_CLOUD_PROMETHEUS_PASSWORD' /opt/rede-studio/secrets/app.json)
+
+echo "===== [5/8] Subir Nginx + Redis + vmagent via Docker Compose ====="
+# RabbitMQ NAO roda aqui -- fica numa VM separada (rede-studio-rabbitmq),
+# ver RABBITMQ_HOST no env abaixo. E2.1.Micro so tem 1GB de RAM, nao cabe
+# nginx + RabbitMQ + JVM na mesma VM. Redis fica aqui porque o codigo hoje
+# assume 127.0.0.1 (IdempotencyService/AuthService) -- maxmemory baixo
+# porque a VM inteira so tem 1GB.
+cat >/opt/rede-studio/compose/docker-compose.prod.yml <<EOF
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: rede-studio-nginx
+    restart: unless-stopped
+    # network_mode: host -- a API escuta em 127.0.0.1 (loopback), so
+    # acessivel de dentro do mesmo namespace de rede. Com bridge padrao
+    # (ports: + host.docker.internal) o nginx nao alcanca loopback do
+    # host, so a gateway -- daria 502 sempre. Host networking evita isso
+    # sem precisar expor a API em 0.0.0.0.
+    network_mode: host
+    volumes:
+      - /opt/rede-studio/compose/nginx.conf:/etc/nginx/conf.d/api.conf:ro
+
+  redis:
+    image: redis:7-alpine
+    container_name: rede-studio-redis
+    restart: unless-stopped
+    network_mode: host
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --save ""
+
+  vmagent:
+    image: victoriametrics/vmagent:latest
+    container_name: rede-studio-vmagent
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /opt/rede-studio/compose/vmagent-scrape.yml:/etc/vmagent/scrape.yml:ro
+      - vmagent_data:/vmagentdata
+    command:
+      - -promscrape.config=/etc/vmagent/scrape.yml
+      - -remoteWrite.url=$GRAFANA_PROM_URL
+      - -remoteWrite.basicAuth.username=$GRAFANA_PROM_USER
+      - -remoteWrite.basicAuth.password=$GRAFANA_PROM_PASS
+
+volumes:
+  vmagent_data:
+EOF
+
+cat >/opt/rede-studio/compose/vmagent-scrape.yml <<'SCRAPEEOF'
+scrape_configs:
+  - job_name: quarkus
+    metrics_path: /q/metrics
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['127.0.0.1:${app_port}']
+SCRAPEEOF
+
+# NGINXEOF entre aspas simples: impede o bash de tentar expandir
+# $host/$remote_addr/etc. como se fossem variaveis de shell. O
+# ${app_port} abaixo ja foi resolvido pelo Terraform (templatefile)
+# antes deste script sequer chegar na VM — a troca acontece no texto
+# bruto do template, independente de como o bash trataria aspas.
+cat >/opt/rede-studio/compose/nginx.conf <<'NGINXEOF'
+server {
+    listen 80 default_server;
+    server_name _;
+
+    large_client_header_buffers 4 16k;
+
+    location / {
+        proxy_pass         http://127.0.0.1:${app_port};
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout    60s;
+    }
+}
+NGINXEOF
+
+cat >/etc/systemd/system/rede-studio-compose.service <<'EOF'
+[Unit]
+Description=Rede Studio — Nginx (Docker Compose)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/rede-studio/compose
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now rede-studio-compose
+
+echo "===== [6/8] Env file da API ====="
+# VM de 1GB total -- heap/metaspace/code-cache limitados explicitamente
+# pra sobrar espaco pro SO + Docker + nginx. Monitorar OOM no journal
+# (journalctl -u rede-studio) nas primeiras semanas.
+cat >/opt/rede-studio/env <<EOF
+QUARKUS_PROFILE=master
+MONGODB_DATABASE=${mongodb_database}
+MONGODB_URI=$MONGODB_URI
+JWT_KEYS_DIR=/opt/rede-studio/secrets
+JWT_PRIVATE_KEY_LOCATION=file:/opt/rede-studio/secrets/privateKey.pem
+JWT_PUBLIC_KEY_LOCATION=file:/opt/rede-studio/secrets/publicKey.pem
+JWT_ISSUER=${jwt_issuer}
+JWT_EXPIRATION_SECONDS=${jwt_expiration_seconds}
+CORS_ORIGINS=${cors_origins}
+QUARKUS_HTTP_HOST=127.0.0.1
+QUARKUS_HTTP_PORT=${app_port}
+ADMIN_EMAIL=$ADMIN_EMAIL
+ADMIN_USERNAME=$ADMIN_USER
+ADMIN_PASSWORD=$ADMIN_PASS
+REDIS_URL=redis://127.0.0.1:6379
+RABBITMQ_HOST=${rabbitmq_host}
+RABBITMQ_PORT=5672
+RABBITMQ_USERNAME=$RABBITMQ_USER
+RABBITMQ_PASSWORD=$RABBITMQ_PASS
+MAIL_FROM=${mail_from}
+MAIL_SMTP_HOST=smtp.email.${region}.oci.oraclecloud.com
+MAIL_SMTP_PORT=587
+MAIL_SMTP_USERNAME=$MAIL_SMTP_USER
+MAIL_SMTP_PASSWORD=$MAIL_SMTP_PASS
+EOF
+chmod 640 /opt/rede-studio/env
+
+echo "===== [7/8] Baixar JAR do Object Storage (se existir) ====="
+if oci os object head --bucket-name "${artifacts_bucket}" --namespace "${namespace}" \
+     --name quarkus-app.tar.gz --region "${region}" --auth instance_principal >/dev/null 2>&1; then
+  oci os object get --bucket-name "${artifacts_bucket}" --namespace "${namespace}" \
+    --name quarkus-app.tar.gz --file /tmp/quarkus-app.tar.gz --region "${region}" --auth instance_principal
+  tar -xzf /tmp/quarkus-app.tar.gz -C /opt/rede-studio/app/
+else
+  echo "AVISO: artefato ainda nao publicado. Faca o deploy depois (deploy-oracle.sh)."
+fi
+
+chown -R redestudio:redestudio /opt/rede-studio
+chmod 600 /opt/rede-studio/secrets/* 2>/dev/null || true
+
+echo "===== [8/8] systemd unit da API ====="
+cat >/etc/systemd/system/rede-studio.service <<'EOF'
+[Unit]
+Description=Rede Studio API (Quarkus)
+After=network-online.target rede-studio-compose.service
+Wants=network-online.target
+Requires=rede-studio-compose.service
+
+[Service]
+Type=simple
+User=redestudio
+Group=redestudio
+WorkingDirectory=/opt/rede-studio/app/quarkus-app
+EnvironmentFile=/opt/rede-studio/env
+ExecStart=/usr/bin/java -Xmx350m -Xss256k -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -jar /opt/rede-studio/app/quarkus-app/quarkus-run.jar
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/rede-studio/logs/app.log
+StandardError=append:/opt/rede-studio/logs/app.log
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable rede-studio
+if [ -f /opt/rede-studio/app/quarkus-app/quarkus-run.jar ]; then
+  systemctl start rede-studio
+fi
+
+echo "===== BOOTSTRAP CONCLUIDO ====="
+
+# Diagnostico: Bastion Managed SSH tem ficado preso em CREATING nessa
+# shape, entao sem isso nao ha como ver o log da app depois do boot.
+# Espera ate 90s a app responder local, depois despeja status+log no
+# console serial (visivel via `oci compute console-history`) de qualquer
+# forma -- funciona mesmo se a app nunca subir.
+echo "===== DIAGNOSTICO: aguardando app responder (ate 90s) ====="
+for i in $(seq 1 18); do
+  if curl -sf -m 3 "http://127.0.0.1:${app_port}/q/health/live" >/dev/null 2>&1; then
+    echo "App respondeu apos $((i*5))s"
+    break
+  fi
+  sleep 5
+done
+echo "===== systemctl status rede-studio ====="
+systemctl status rede-studio --no-pager -l || true
+echo "===== ultimas 150 linhas de app.log ====="
+tail -n 150 /opt/rede-studio/logs/app.log 2>&1 || echo "(app.log nao existe ainda)"
+echo "===== docker ps ====="
+docker ps -a || true
+echo "===== docker logs nginx ====="
+docker logs rede-studio-nginx --tail 100 2>&1 || true
+echo "===== docker logs vmagent ====="
+docker logs rede-studio-vmagent --tail 150 2>&1 || true
+echo "===== curl local porta 80 ====="
+curl -sv -m 3 http://127.0.0.1:80/ 2>&1 || true
+echo "===== ss -tlnp (portas escutando) ====="
+ss -tlnp 2>&1 || true
+echo "===== free -h (memoria) ====="
+free -h 2>&1 || true
+echo "===== docker stats (uso de memoria por container) ====="
+docker stats --no-stream 2>&1 || true
+echo "===== FIM DO DIAGNOSTICO ====="

@@ -34,25 +34,6 @@ resource "aws_iam_role_policy" "api_secrets" {
   })
 }
 
-resource "aws_iam_role_policy" "api_s3_read" {
-  name = "rede-studio-s3-artifacts-read"
-  role = aws_iam_role.api.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = ["s3:GetObject", "s3:ListBucket"]
-        Resource = [
-          aws_s3_bucket.artifacts.arn,
-          "${aws_s3_bucket.artifacts.arn}/*"
-        ]
-      }
-    ]
-  })
-}
-
 resource "aws_iam_role_policy" "api_cw_logs" {
   name = "rede-studio-cw-logs"
   role = aws_iam_role.api.id

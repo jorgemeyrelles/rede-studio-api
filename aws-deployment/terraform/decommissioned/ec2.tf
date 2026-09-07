@@ -38,6 +38,15 @@ resource "aws_instance" "api" {
   vpc_security_group_ids = [aws_security_group.api.id]
   iam_instance_profile   = aws_iam_instance_profile.api.name
 
+  # Modo "standard" (padrao) em vez de "unlimited": a instancia usa apenas os
+  # creditos de CPU do baseline e NAO gera cobranca de surplus. Isso elimina o
+  # maior item da fatura (~US$9,75/mes de "CPUCredits:t3"). Fica seguro porque o
+  # tuning de JVM no user-data (SerialGC + TieredStopAtLevel=1) mantem o consumo
+  # de CPU ocioso dentro do baseline.
+  credit_specification {
+    cpu_credits = "standard"
+  }
+
   metadata_options {
     http_tokens                 = "required"
     http_endpoint               = "enabled"
@@ -46,7 +55,8 @@ resource "aws_instance" "api" {
 
   root_block_device {
     volume_type = "gp3"
-    volume_size = 30
+    # Reduzido de 30 -> 10 GB (SO + app ocupam < 5 GB). Economiza ~US$1,6/mes.
+    volume_size = 10
     encrypted   = true
   }
 

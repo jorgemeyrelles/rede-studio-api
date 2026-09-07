@@ -9,9 +9,12 @@ import br.com.redestudio.dtos.response.AuthResponse;
 import br.com.redestudio.entities.UserEntity;
 import br.com.redestudio.exceptions.InvalidCredentialsException;
 import br.com.redestudio.exceptions.UserAlreadyExistsException;
+import br.com.redestudio.messaging.UserRegistrationMessage;
+import br.com.redestudio.messaging.UserRegistrationProducer;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.time.Duration;
 import java.util.Set;
 
 /**
@@ -32,6 +35,13 @@ import java.util.Set;
 @ApplicationScoped
 public class AuthService {
 
+    /**
+     * TTL of the Redis registration-dedup claim. Not a uniqueness guarantee
+     * by itself — see {@link IdempotencyService} — just long enough to
+     * absorb double-submits/retries while the queue consumer catches up.
+     */
+    private static final Duration REGISTRATION_CLAIM_TTL = Duration.ofMinutes(10);
+
     @Inject
     UserService userService;
 
@@ -44,28 +54,43 @@ public class AuthService {
     @Inject
     JwtConfiguration jwtConfiguration;
 
+    @Inject
+    IdempotencyService idempotencyService;
+
+    @Inject
+    UserRegistrationProducer userRegistrationProducer;
+
     /**
-     * Registers a new user account and returns a signed JWT on success.
+     * Accepts a new user registration and returns a signed JWT immediately.
      *
-     * <p>Steps:
-     * <ol>
-     *   <li>Validate email and username uniqueness</li>
-     *   <li>Hash the plain-text password with BCrypt</li>
-     *   <li>Persist the new {@link UserEntity} with role {@code USER}</li>
-     *   <li>Generate and return a signed JWT via {@link JwtTokenBuilder}</li>
-     * </ol>
+     * <p>Follows the LB → Redis → fila → BD pattern: this method only claims
+     * the Redis idempotency keys (fast dedup, no MongoDB round-trip) and
+     * publishes a {@link UserRegistrationMessage} to the {@code user.registration}
+     * queue — the actual MongoDB persistence and welcome email happen
+     * asynchronously in {@link br.com.redestudio.messaging.UserRegistrationConsumer}.
+     *
+     * <p>The JWT is self-contained (signed from data already in hand), so it
+     * can be returned before the MongoDB document exists. This trades a small
+     * eventual-consistency window — a login attempt in the same instant the
+     * queue is backlogged could momentarily not find the user yet — for a
+     * synchronous path that never blocks on MongoDB.
      *
      * @param request registration payload (username, email, password)
      * @return {@link AuthResponse} containing the signed JWT and user info
-     * @throws UserAlreadyExistsException if the email or username is already taken
+     * @throws UserAlreadyExistsException if the email or username was already
+     *         claimed within the last {@link #REGISTRATION_CLAIM_TTL}
      */
     public AuthResponse register(RegisterRequest request) {
-        if (userService.existsByEmail(request.getEmail())) {
+        String emailKey = "idempotency:register:email:" + request.getEmail().toLowerCase();
+        String usernameKey = "idempotency:register:username:" + request.getUsername().toLowerCase();
+
+        if (!idempotencyService.claim(emailKey, REGISTRATION_CLAIM_TTL)) {
             throw new UserAlreadyExistsException(
                     "Email already registered: " + request.getEmail());
         }
 
-        if (userService.existsByUsername(request.getUsername())) {
+        if (!idempotencyService.claim(usernameKey, REGISTRATION_CLAIM_TTL)) {
+            idempotencyService.release(emailKey);
             throw new UserAlreadyExistsException(
                     "Username already taken: " + request.getUsername());
         }
@@ -73,25 +98,17 @@ public class AuthService {
         String passwordHash = passwordHasher.hash(request.getPassword());
         Set<String> roles = Set.of("USER");
 
-        UserEntity user = UserEntity.create(
-                request.getUsername(),
-                request.getEmail(),
-                passwordHash,
-                roles);
+        userRegistrationProducer.publish(
+                new UserRegistrationMessage(request.getUsername(), request.getEmail(), passwordHash, roles));
 
-        userService.createUser(user);
-
-        String token = jwtTokenBuilder.generateToken(
-                user.getEmail(),
-                user.getUsername(),
-                user.getRoles());
+        String token = jwtTokenBuilder.generateToken(request.getEmail(), request.getUsername(), roles);
 
         return new AuthResponse(
                 token,
                 "Bearer",
                 jwtConfiguration.expirationSeconds(),
-                user.getUsername(),
-                user.getRoles());
+                request.getUsername(),
+                roles);
     }
 
     /**

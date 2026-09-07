@@ -1,6 +1,7 @@
 # =============================================================
 #  Rede Studio API — Dev Stack
-#  Serviços: MongoDB · API Quarkus · Nginx · Prometheus · Grafana
+#  Serviços: MongoDB · RabbitMQ · Redis · API Quarkus · Nginx ·
+#            Prometheus · Grafana
 #
 #  Pré-requisitos:
 #    1. Gere as chaves JWT: bash ../../generate-jwt-keys.sh
@@ -37,6 +38,50 @@ services:
       start_period: 20s
 
   # ------------------------------------------------------------
+  #  RabbitMQ — fila de mensageria (emails, escrita idempotente)
+  # ------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rede-studio-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-redestudio}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-dev_secret_change_me}
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI (http://localhost:15672)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - rede-studio-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ------------------------------------------------------------
+  #  Redis — deduplicação/idempotência (LB → Redis → fila → BD)
+  # ------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: rede-studio-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rede-studio-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ------------------------------------------------------------
   #  Quarkus API
   # ------------------------------------------------------------
   rede-studio-api:
@@ -57,6 +102,10 @@ services:
       - rede-studio-net
     depends_on:
       mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/q/health/live || exit 1"]
@@ -141,5 +190,7 @@ networks:
 # ------------------------------------------------------------
 volumes:
   mongo_data:
+  rabbitmq_data:
+  redis_data:
   prometheus_data:
   grafana_data:

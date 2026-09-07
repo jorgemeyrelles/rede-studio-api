@@ -39,6 +39,8 @@ QUARKUS_PROFILE=master
 MONGODB_DATABASE=${mongodb_database}
 MONGODB_URI=$MONGODB_URI
 JWT_KEYS_DIR=/opt/rede-studio/secrets
+JWT_PRIVATE_KEY_LOCATION=/opt/rede-studio/secrets/privateKey.pem
+JWT_PUBLIC_KEY_LOCATION=/opt/rede-studio/secrets/publicKey.pem
 JWT_ISSUER=${jwt_issuer}
 JWT_EXPIRATION_SECONDS=${jwt_expiration_seconds}
 CORS_ORIGINS=${cors_origins}
@@ -74,7 +76,16 @@ User=redestudio
 Group=redestudio
 WorkingDirectory=/opt/rede-studio/app/quarkus-app
 EnvironmentFile=/opt/rede-studio/env
-ExecStart=/usr/bin/java -Xmx384m -XX:MaxRAMPercentage=60 -jar /opt/rede-studio/app/quarkus-app/quarkus-run.jar
+# Tuning para instancia burstable (t3.micro, 2 vCPU / 1 GB):
+#   -XX:+UseSerialGC        -> GC single-thread; elimina threads de GC paralelo
+#                              (G1) que queimam CPU de background no ocioso.
+#   -XX:TieredStopAtLevel=1 -> limita o JIT ao compilador C1; corta a CPU do
+#                              compilador C2 em background (ganho grande p/ baixo trafego).
+#   -Xmx256m                -> heap enxuto; Quarkus opera folgado nesse limite.
+#   -XX:+ExitOnOutOfMemoryError -> falha rapida (systemd reinicia) em vez de travar.
+# Efeito: consumo de CPU ocioso cai bem abaixo do baseline do t3, permitindo
+# rodar em modo de creditos "standard" sem cobranca de surplus.
+ExecStart=/usr/bin/java -Xmx256m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:+ExitOnOutOfMemoryError -jar /opt/rede-studio/app/quarkus-app/quarkus-run.jar
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:/opt/rede-studio/logs/app.log

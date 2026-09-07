@@ -1,5 +1,6 @@
 package br.com.redestudio.services;
 
+import br.com.redestudio.dtos.request.UpdateUserRequest;
 import br.com.redestudio.entities.UserEntity;
 import br.com.redestudio.exceptions.UserAlreadyExistsException;
 import br.com.redestudio.repositories.UserRepository;
@@ -27,16 +28,19 @@ public class UserService {
     /**
      * Persists a new user document in MongoDB.
      *
-     * <p>Uniqueness of {@code email} and {@code username} must be guaranteed
-     * by the caller ({@link AuthService}) before invoking this method.
-     * A unique index on both fields also enforces this at the database level
-     * (created by {@code StartupRunner}).
+     * <p>Uniqueness of {@code email} and {@code username} is normally
+     * pre-checked by the caller ({@link AuthService}), but that check-then-act
+     * is racy under concurrent requests — {@link UserRepository#persistUser}
+     * enforces the real guarantee via MongoDB's unique index and throws
+     * {@link UserAlreadyExistsException} if it's violated.
      *
      * @param user fully populated {@link UserEntity} to persist
      * @return the persisted entity (id populated by MongoDB)
+     * @throws UserAlreadyExistsException if email/username collided with an
+     *                                     existing account (race condition)
      */
     public UserEntity createUser(UserEntity user) {
-        userRepository.persist(user);
+        userRepository.persistUser(user);
         return user;
     }
 
@@ -67,6 +71,16 @@ public class UserService {
      */
     public Optional<UserEntity> findByEmail(String email) {
         return userRepository.findByEmail(email);
+    }
+
+    /**
+     * Looks up users whose username contains the given substring, case-insensitively.
+     *
+     * @param partial the substring to search for
+     * @return list of matching users (may be empty)
+     */
+    public List<UserEntity> searchByNameContains(String partial) {
+        return userRepository.findByUsernameContains(partial);
     }
 
     /**
@@ -114,6 +128,52 @@ public class UserService {
         UserEntity user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new NotFoundException("User not found with email: " + email));
         user.setPasswordHash(newPasswordHash);
+        user.setUpdatedAt(Instant.now());
+        userRepository.update(user);
+        return user;
+    }
+
+    /**
+     * Partially updates a user's profile fields.
+     *
+     * <p>Only non-null fields in {@code request} are applied. Username/email
+     * uniqueness is re-checked only when that field is actually changing.
+     * Password is never touched here — use {@link #changePassword} instead.
+     *
+     * @param email   the current email of the user to update
+     * @param request the fields to change (all optional)
+     * @return the updated entity
+     * @throws NotFoundException          if no user with that email exists
+     * @throws UserAlreadyExistsException if the new username/email is already taken by another account
+     */
+    public UserEntity patchUser(String email, UpdateUserRequest request) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NotFoundException("User not found with email: " + email));
+
+        String newUsername = request.getUsername();
+        if (newUsername != null && !newUsername.equals(user.getUsername())) {
+            if (userRepository.existsByUsername(newUsername)) {
+                throw new UserAlreadyExistsException("Username already in use: " + newUsername);
+            }
+            user.setUsername(newUsername);
+        }
+
+        String newEmail = request.getEmail();
+        if (newEmail != null && !newEmail.equals(user.getEmail())) {
+            if (userRepository.existsByEmail(newEmail)) {
+                throw new UserAlreadyExistsException("Email already in use: " + newEmail);
+            }
+            user.setEmail(newEmail);
+        }
+
+        if (request.getRoles() != null) {
+            user.setRoles(request.getRoles());
+        }
+
+        if (request.getActive() != null) {
+            user.setActive(request.getActive());
+        }
+
         user.setUpdatedAt(Instant.now());
         userRepository.update(user);
         return user;

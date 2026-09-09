@@ -54,6 +54,11 @@ resource "oci_vault_secret" "app" {
       # consumer assincrono de registro, nao bloqueia o resto da API).
       MAIL_SMTP_USERNAME  = var.enable_email_delivery ? oci_identity_smtp_credential.email[0].username : "PENDENTE_DOMINIO"
       MAIL_SMTP_PASSWORD  = var.enable_email_delivery ? oci_identity_smtp_credential.email[0].password : "PENDENTE_DOMINIO"
+      # Client IDs do login social (Google/Microsoft) — publicos por
+      # natureza (nao sao secret), mas vivem no mesmo bundle por
+      # conveniencia, igual o resto da config nao-Terraform-managed.
+      GOOGLE_OAUTH_CLIENT_ID    = "SUBSTITUA_APOS_APPLY"
+      MICROSOFT_OAUTH_CLIENT_ID = "SUBSTITUA_APOS_APPLY"
     }))
   }
 

@@ -53,6 +53,8 @@ MAIL_SMTP_PASS=$(jq -r '.MAIL_SMTP_PASSWORD' /opt/rede-studio/secrets/app.json)
 GRAFANA_PROM_URL=$(jq -r '.GRAFANA_CLOUD_PROMETHEUS_URL' /opt/rede-studio/secrets/app.json)
 GRAFANA_PROM_USER=$(jq -r '.GRAFANA_CLOUD_PROMETHEUS_USERNAME' /opt/rede-studio/secrets/app.json)
 GRAFANA_PROM_PASS=$(jq -r '.GRAFANA_CLOUD_PROMETHEUS_PASSWORD' /opt/rede-studio/secrets/app.json)
+GOOGLE_OAUTH_CLIENT_ID=$(jq -r '.GOOGLE_OAUTH_CLIENT_ID' /opt/rede-studio/secrets/app.json)
+MICROSOFT_OAUTH_CLIENT_ID=$(jq -r '.MICROSOFT_OAUTH_CLIENT_ID' /opt/rede-studio/secrets/app.json)
 
 echo "===== [5/9] Subir Nginx + Redis + vmagent via Docker Compose ====="
 # RabbitMQ NAO roda aqui -- fica numa VM separada (rede-studio-rabbitmq),
@@ -279,6 +281,8 @@ MAIL_SMTP_HOST=smtp.email.${region}.oci.oraclecloud.com
 MAIL_SMTP_PORT=587
 MAIL_SMTP_USERNAME=$MAIL_SMTP_USER
 MAIL_SMTP_PASSWORD=$MAIL_SMTP_PASS
+GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID
+MICROSOFT_OAUTH_CLIENT_ID=$MICROSOFT_OAUTH_CLIENT_ID
 EOF
 chmod 640 /opt/rede-studio/env
 

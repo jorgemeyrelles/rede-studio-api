@@ -2,6 +2,7 @@ package br.com.redestudio.handlers;
 
 import br.com.redestudio.dtos.response.ErrorResponse;
 import br.com.redestudio.exceptions.InvalidCredentialsException;
+import br.com.redestudio.exceptions.OAuthVerificationException;
 import br.com.redestudio.exceptions.UnauthorizedException;
 import br.com.redestudio.exceptions.UserAlreadyExistsException;
 import jakarta.ws.rs.NotAllowedException;
@@ -26,6 +27,7 @@ import org.jboss.logging.Logger;
  *   <li>{@link UserAlreadyExistsException} → 409 Conflict</li>
  *   <li>{@link InvalidCredentialsException} → 401 Unauthorized</li>
  *   <li>{@link UnauthorizedException} → 401 Unauthorized</li>
+ *   <li>{@link OAuthVerificationException} → 401 Unauthorized</li>
  *   <li>{@link ConstraintViolationException} → 400 Bad Request (validation)</li>
  *   <li>{@link NotFoundException} → 404 Not Found</li>
  *   <li>{@link NotAllowedException} → 405 Method Not Allowed</li>
@@ -53,6 +55,10 @@ public class GlobalExceptionHandler implements ExceptionMapper<Exception> {
         }
 
         if (exception instanceof UnauthorizedException ex) {
+            return build(Response.Status.UNAUTHORIZED, "UNAUTHORIZED", ex.getMessage(), path);
+        }
+
+        if (exception instanceof OAuthVerificationException ex) {
             return build(Response.Status.UNAUTHORIZED, "UNAUTHORIZED", ex.getMessage(), path);
         }
 

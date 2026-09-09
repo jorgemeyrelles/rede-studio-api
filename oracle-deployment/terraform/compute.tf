@@ -115,6 +115,8 @@ resource "oci_core_instance" "api" {
       app_port                = var.app_port
       mail_from               = var.email_approved_sender
       rabbitmq_host           = oci_core_instance.rabbitmq.private_ip
+      duckdns_hostname        = var.duckdns_hostname
+      letsencrypt_email       = var.letsencrypt_email
     }))
   }
 

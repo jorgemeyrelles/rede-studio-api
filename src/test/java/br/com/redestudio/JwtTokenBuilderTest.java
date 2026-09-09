@@ -3,6 +3,7 @@ package br.com.redestudio;
 import br.com.redestudio.components.JwtTokenBuilder;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import org.bson.types.ObjectId;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -28,7 +29,7 @@ class JwtTokenBuilderTest {
     @Test
     void generateToken_returnedStringHasThreeJwtParts() {
         var token = jwtTokenBuilder.generateToken(
-                "user@test.local", "testuser", Set.of("USER"));
+                "user@test.local", new ObjectId().toHexString(), "testuser", Set.of("USER"));
 
         var parts = token.split("\\.");
         assertEquals(3, parts.length,
@@ -38,7 +39,7 @@ class JwtTokenBuilderTest {
     @Test
     void generateToken_payloadContainsSubjectClaim() {
         var token = jwtTokenBuilder.generateToken(
-                "subject@test.local", "subjectuser", Set.of("USER"));
+                "subject@test.local", new ObjectId().toHexString(), "subjectuser", Set.of("USER"));
 
         var payload = decodePayload(token);
         assertTrue(payload.contains("\"sub\""),        "Payload must contain 'sub' claim");
@@ -48,7 +49,7 @@ class JwtTokenBuilderTest {
     @Test
     void generateToken_payloadContainsPreferredUsernameClaim() {
         var token = jwtTokenBuilder.generateToken(
-                "pun@test.local", "preferredname", Set.of("USER"));
+                "pun@test.local", new ObjectId().toHexString(), "preferredname", Set.of("USER"));
 
         var payload = decodePayload(token);
         assertTrue(payload.contains("preferred_username"),
@@ -60,7 +61,7 @@ class JwtTokenBuilderTest {
     @Test
     void generateToken_payloadContainsGroupsClaim() {
         var token = jwtTokenBuilder.generateToken(
-                "roles@test.local", "rolesuser", Set.of("USER", "ADMIN"));
+                "roles@test.local", new ObjectId().toHexString(), "rolesuser", Set.of("USER", "ADMIN"));
 
         var payload = decodePayload(token);
         assertTrue(payload.contains("USER"),  "Payload must contain USER role");
@@ -70,7 +71,7 @@ class JwtTokenBuilderTest {
     @Test
     void generateToken_payloadContainsIssuerClaim() {
         var token = jwtTokenBuilder.generateToken(
-                "iss@test.local", "issuser", Set.of("USER"));
+                "iss@test.local", new ObjectId().toHexString(), "issuser", Set.of("USER"));
 
         var payload = decodePayload(token);
         assertTrue(payload.contains("\"iss\""), "Payload must contain 'iss' claim");
@@ -79,7 +80,7 @@ class JwtTokenBuilderTest {
     @Test
     void generateToken_payloadContainsExpirationClaim() {
         var token = jwtTokenBuilder.generateToken(
-                "exp@test.local", "expuser", Set.of("USER"));
+                "exp@test.local", new ObjectId().toHexString(), "expuser", Set.of("USER"));
 
         var payload = decodePayload(token);
         assertTrue(payload.contains("\"exp\""), "Payload must contain 'exp' claim");

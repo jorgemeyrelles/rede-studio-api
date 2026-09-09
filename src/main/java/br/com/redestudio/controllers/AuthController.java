@@ -1,6 +1,7 @@
 package br.com.redestudio.controllers;
 
 import br.com.redestudio.dtos.request.LoginRequest;
+import br.com.redestudio.dtos.request.OAuthLoginRequest;
 import br.com.redestudio.dtos.request.RegisterRequest;
 import br.com.redestudio.dtos.response.AuthResponse;
 import br.com.redestudio.services.AuthService;
@@ -9,6 +10,7 @@ import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -90,6 +92,36 @@ public class AuthController {
     })
     public Response login(@Valid LoginRequest request) {
         AuthResponse response = authService.login(request);
+        return Response.ok(response).build();
+    }
+
+    /**
+     * Authenticates via a Google/Microsoft ID token obtained client-side by
+     * the frontend's SDK — this endpoint only verifies it, it never talks to
+     * the provider itself. Creates or links a local account as needed.
+     *
+     * @param provider {@code "google"} or {@code "microsoft"}
+     * @param request  payload carrying the provider's ID token
+     * @return HTTP 200 with {@link AuthResponse}
+     */
+    @POST
+    @Path("/oauth/{provider}")
+    @PermitAll
+    @Operation(
+            summary = "Login/register via Google or Microsoft",
+            description = "Verifies the provider's ID token and returns a signed JWT, "
+                    + "creating or linking a local account as needed.")
+    @APIResponses({
+        @APIResponse(
+                responseCode = "200",
+                description = "Authenticated successfully",
+                content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @APIResponse(responseCode = "400", description = "Validation error"),
+        @APIResponse(responseCode = "401", description = "Invalid or expired provider token"),
+        @APIResponse(responseCode = "409", description = "Concurrent registration for the same email")
+    })
+    public Response loginWithOAuth(@PathParam("provider") String provider, @Valid OAuthLoginRequest request) {
+        AuthResponse response = authService.loginOrRegisterOAuth(provider, request.getIdToken());
         return Response.ok(response).build();
     }
 }

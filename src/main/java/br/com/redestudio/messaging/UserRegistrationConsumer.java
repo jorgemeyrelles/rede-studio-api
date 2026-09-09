@@ -6,6 +6,7 @@ import br.com.redestudio.services.UserService;
 import io.vertx.core.json.JsonObject;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.bson.types.ObjectId;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.jboss.logging.Logger;
 
@@ -42,7 +43,12 @@ public class UserRegistrationConsumer {
         }
 
         UserEntity user = UserEntity.create(
-                message.username(), message.email(), message.passwordHash(), message.roles());
+                message.username(), message.email(), message.passwordHash(), message.roles(),
+                message.oauthProvider(), message.oauthProviderId());
+        // O _id vem pré-gerado de AuthService#register (não deixamos o Mongo
+        // sortear um aqui) — é o mesmo valor já embutido na claim "uid" do
+        // JWT emitido de forma síncrona, antes desse consumer rodar.
+        user.setId(new ObjectId(message.id()));
         userService.createUser(user);
 
         // Best-effort: o usuario ja foi persistido com sucesso acima. Uma falha

@@ -77,3 +77,15 @@ variable "email_approved_sender" {
   type        = string
   default     = ""
 }
+
+variable "duckdns_hostname" {
+  description = "Hostname DuckDNS apontando para o IP reservado da API (usado pelo Certbot para emitir o certificado TLS via desafio HTTP-01). Deixe vazio pra pular a emissão de TLS no cloud-init."
+  type        = string
+  default     = ""
+}
+
+variable "letsencrypt_email" {
+  description = "E-mail de contato registrado no Let's Encrypt (avisos de expiração de certificado) — só usado quando duckdns_hostname não está vazio."
+  type        = string
+  default     = ""
+}

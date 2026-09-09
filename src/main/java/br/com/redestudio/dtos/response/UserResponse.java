@@ -36,6 +36,9 @@ public class UserResponse {
     @Schema(description = "Whether the account is active", example = "true")
     private boolean active;
 
+    @Schema(description = "Preferred UI language (ISO 639-1)", example = "pt")
+    private String preferredLanguage;
+
     @Schema(description = "Account creation timestamp (UTC)")
     private Instant createdAt;
 
@@ -55,6 +58,7 @@ public class UserResponse {
                 entity.getEmail(),
                 entity.getRoles(),
                 entity.isActive(),
+                entity.getPreferredLanguage(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }

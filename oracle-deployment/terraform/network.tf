@@ -58,6 +58,18 @@ resource "oci_core_security_list" "api" {
     }
   }
 
+  ingress_security_rules {
+    protocol    = "6"
+    source      = var.vcn_cidr
+    source_type = "CIDR_BLOCK"
+    description = "SSH -- somente de dentro da VCN (sessao gerenciada do Bastion, nunca da internet)"
+
+    tcp_options {
+      min = 22
+      max = 22
+    }
+  }
+
   egress_security_rules {
     protocol    = "all"
     destination = "0.0.0.0/0"

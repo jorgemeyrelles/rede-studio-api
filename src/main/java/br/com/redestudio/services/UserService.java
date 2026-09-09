@@ -1,5 +1,6 @@
 package br.com.redestudio.services;
 
+import br.com.redestudio.dtos.request.UpdateMyProfileRequest;
 import br.com.redestudio.dtos.request.UpdateUserRequest;
 import br.com.redestudio.entities.UserEntity;
 import br.com.redestudio.exceptions.UserAlreadyExistsException;
@@ -71,6 +72,17 @@ public class UserService {
      */
     public Optional<UserEntity> findByEmail(String email) {
         return userRepository.findByEmail(email);
+    }
+
+    /**
+     * Looks up a user by their linked OAuth identity.
+     *
+     * @param provider   {@code "google"} or {@code "microsoft"}
+     * @param providerId the provider's subject id for this user
+     * @return an {@link Optional} with the user, or empty if not linked
+     */
+    public Optional<UserEntity> findByOauthProviderId(String provider, String providerId) {
+        return userRepository.findByOauthProviderId(provider, providerId);
     }
 
     /**
@@ -172,6 +184,40 @@ public class UserService {
 
         if (request.getActive() != null) {
             user.setActive(request.getActive());
+        }
+
+        user.setUpdatedAt(Instant.now());
+        userRepository.update(user);
+        return user;
+    }
+
+    /**
+     * Partially updates the authenticated user's own profile.
+     *
+     * <p>Unlike {@link #patchUser}, this never touches {@code email},
+     * {@code roles} or {@code active} — self-service edits are limited to
+     * {@code username}/{@code preferredLanguage} by design.
+     *
+     * @param email   the email of the authenticated user (JWT subject)
+     * @param request the fields to change (all optional)
+     * @return the updated entity
+     * @throws NotFoundException          if no user with that email exists
+     * @throws UserAlreadyExistsException if the new username is already taken by another account
+     */
+    public UserEntity patchOwnProfile(String email, UpdateMyProfileRequest request) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NotFoundException("User not found with email: " + email));
+
+        String newUsername = request.getUsername();
+        if (newUsername != null && !newUsername.equals(user.getUsername())) {
+            if (userRepository.existsByUsername(newUsername)) {
+                throw new UserAlreadyExistsException("Username already in use: " + newUsername);
+            }
+            user.setUsername(newUsername);
+        }
+
+        if (request.getPreferredLanguage() != null) {
+            user.setPreferredLanguage(request.getPreferredLanguage());
         }
 
         user.setUpdatedAt(Instant.now());

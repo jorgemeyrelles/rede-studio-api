@@ -42,6 +42,10 @@ public class JwtTokenBuilder {
      *   <li>{@code iss} — issuer from configuration</li>
      *   <li>{@code sub} — user email (stable unique identifier)</li>
      *   <li>{@code upn} — user email (MicroProfile JWT principal name)</li>
+     *   <li>{@code uid} — user's Mongo {@code _id} (hex string) — lets other
+     *       entities (e.g. {@code ProjectEntity.ownerId}) reference the user
+     *       by ID instead of email. See {@code AuthService#register} for why
+     *       this is generated client-side ahead of the actual Mongo insert.</li>
      *   <li>{@code groups} — roles set, used by {@code @RolesAllowed}</li>
      *   <li>{@code preferred_username} — display name</li>
      *   <li>{@code iat} — issued-at (now)</li>
@@ -49,16 +53,18 @@ public class JwtTokenBuilder {
      * </ul>
      *
      * @param subject  the user's email address
+     * @param userId   the user's Mongo {@code _id} as a hex string
      * @param username the user's display name
      * @param roles    set of role strings (e.g. {@code {"USER"}})
      * @return signed JWT string ready to be returned in {@code AuthResponse}
      * @throws IllegalStateException if signing fails (key not found or invalid)
      */
-    public String generateToken(String subject, String username, Set<String> roles) {
+    public String generateToken(String subject, String userId, String username, Set<String> roles) {
         try {
             return Jwt.issuer(jwtConfiguration.issuer())
                     .subject(subject)
                     .upn(subject)
+                    .claim("uid", userId)
                     .claim("preferred_username", username)
                     .groups(roles)
                     .issuedAt(Instant.now())

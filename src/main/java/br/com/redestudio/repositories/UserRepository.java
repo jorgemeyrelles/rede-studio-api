@@ -45,6 +45,23 @@ public class UserRepository implements PanacheMongoRepository<UserEntity> {
     }
 
     /**
+     * Finds a user by their linked OAuth identity (provider + provider's
+     * subject id). Uses native Mongo query syntax rather than Panache's
+     * simplified DSL — this project already hit a real bug where the
+     * simplified syntax silently failed to translate for a two-field match
+     * (see {@link #findByUsernameContains}), so native syntax is the
+     * established, trusted pattern for anything beyond a single field.
+     *
+     * @param provider   {@code "google"} or {@code "microsoft"}
+     * @param providerId the provider's subject id for this user
+     * @return an {@link Optional} containing the user, or empty if not linked
+     */
+    public Optional<UserEntity> findByOauthProviderId(String provider, String providerId) {
+        return find("{'oauth_provider': ?1, 'oauth_provider_id': ?2}", provider, providerId)
+                .firstResultOptional();
+    }
+
+    /**
      * Finds users whose username contains the given substring, case-insensitively.
      *
      * @param partial the substring to search for (treated as a literal, not a regex)

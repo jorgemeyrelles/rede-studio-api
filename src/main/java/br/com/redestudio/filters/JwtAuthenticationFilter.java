@@ -56,6 +56,7 @@ public class JwtAuthenticationFilter implements ContainerRequestFilter {
     private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
             "/api/auth/register",
             "/api/auth/login",
+            "/api/auth/oauth",
             "/q/health",
             "/q/metrics",
             "/q/openapi",

@@ -1,0 +1,28 @@
+# =============================================================
+#  terraform.tfvars — Valores de producao
+#  Copie para terraform.tfvars (gitignored) e preencha.
+# =============================================================
+
+tenancy_ocid = "ocid1.tenancy.oc1..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+region       = "sa-saopaulo-1"
+environment  = "prod"
+
+# Rede
+vcn_cidr            = "10.0.0.0/16"
+public_subnet_cidr  = "10.0.1.0/24"
+
+# Compute — 2x VM.Standard.E2.1.Micro (Always Free, shape fixo, sem
+# variavel de OCPU/memoria). Ver compute.tf para o motivo (Ampere A1
+# Flex fora de capacidade em sa-saopaulo-1).
+
+# MongoDB Atlas (free tier M0)
+mongodb_database = "rede_studio_prod"
+
+# Aplicacao
+jwt_issuer             = "https://api.redestudio.com.br"
+jwt_expiration_seconds = 86400
+cors_origins           = "https://redestudio.com.br,https://www.redestudio.com.br"
+
+# OCI Email Delivery — precisa ser um endereco que voce controla e vai
+# verificar (Approved Sender) apos o apply
+email_approved_sender = "naoresponder@redestudio.com.br"

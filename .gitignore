@@ -1,3 +1,6 @@
+# Claude Code local harness (agents/skills/plans) — pessoal, nao versionado
+.claude/
+
 #Maven
 target/
 pom.xml.tag
@@ -28,6 +31,18 @@ nb-configuration.xml
 # OSX
 .DS_Store
 
+# Environment / Secrets
+.env.dev
+.env.master
+secrets/
+*.pem
+*.key
+*.p12
+*.jks
+
+# Keep templates
+!.env.master.example
+
 # Vim
 *.swp
 *.swo
@@ -43,3 +58,18 @@ nb-configuration.xml
 /.quarkus/cli/plugins/
 # TLS Certificates
 .certs/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+!terraform.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

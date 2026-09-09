@@ -1,1 +1,295 @@
-{}
+# =============================================================
+#  Rede Studio API — base configuration
+#  Profiles: %dev (local containers) | %master (AWS + Atlas)
+# =============================================================
+
+quarkus:
+  application:
+    name: rede-studio-api
+
+  http:
+    port: 8080
+    auth:
+      proactive: false
+    cors:
+      enabled: true
+      origins: ${CORS_ORIGINS:http://localhost:5173}
+      methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+      headers: Content-Type,Authorization,Accept
+      exposed-headers: Content-Type,Authorization
+
+  mongodb:
+    connection-string: ${MONGODB_URI:mongodb://localhost:27017}
+    database: ${MONGODB_DATABASE:rede_studio_dev}
+
+  redis:
+    hosts: ${REDIS_URL:redis://localhost:6379}
+
+  mailer:
+    from: ${MAIL_FROM:naoresponder@redestudio.com.br}
+
+  log:
+    level: INFO
+    console:
+      format: "%d{yyyy-MM-dd HH:mm:ss} %-5p [%c{2.}] (%t) %s%e%n"
+      json: false
+
+  smallrye-openapi:
+    path: /q/openapi
+    info-title: "Rede Studio API"
+    info-version: "1.0.0"
+    info-description: "API de gerenciamento de infraestrutura de rede corporativa"
+    auto-add-security: false
+
+  swagger-ui:
+    path: /q/swagger-ui
+    always-include: true   # habilitado em todos os perfis — desabilitado via %master abaixo
+
+mp:
+  jwt:
+    verify:
+      publickey:
+        location: ${JWT_PUBLIC_KEY_LOCATION:publicKey.pem}
+      issuer: ${JWT_ISSUER:https://redestudio.com.br}
+
+  messaging:
+    outgoing:
+      user-registration-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: user.registration
+          type: direct
+          durable: true
+        default-routing-key: user.registration
+      project-create-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: project.create
+          type: direct
+          durable: true
+        default-routing-key: project.create
+      project-rename-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: project.rename
+          type: direct
+          durable: true
+        default-routing-key: project.rename
+      project-snapshot-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: project.snapshot
+          type: direct
+          durable: true
+        default-routing-key: project.snapshot
+      project-delete-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: project.delete
+          type: direct
+          durable: true
+        default-routing-key: project.delete
+    incoming:
+      user-registration-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: user.registration
+          durable: true
+        exchange:
+          name: user.registration
+          type: direct
+          durable: true
+        routing-keys: user.registration
+      project-create-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: project.create
+          durable: true
+        exchange:
+          name: project.create
+          type: direct
+          durable: true
+        routing-keys: project.create
+      project-rename-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: project.rename
+          durable: true
+        exchange:
+          name: project.rename
+          type: direct
+          durable: true
+        routing-keys: project.rename
+      project-snapshot-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: project.snapshot
+          durable: true
+        exchange:
+          name: project.snapshot
+          type: direct
+          durable: true
+        routing-keys: project.snapshot
+      project-delete-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: project.delete
+          durable: true
+        exchange:
+          name: project.delete
+          type: direct
+          durable: true
+        routing-keys: project.delete
+
+# Conexão global do conector RabbitMQ (compartilhada por todos os channels)
+rabbitmq-host: ${RABBITMQ_HOST:localhost}
+rabbitmq-port: ${RABBITMQ_PORT:5672}
+rabbitmq-username: ${RABBITMQ_USERNAME:guest}
+rabbitmq-password: ${RABBITMQ_PASSWORD:guest}
+
+smallrye:
+  jwt:
+    sign:
+      key:
+        location: ${JWT_PRIVATE_KEY_LOCATION:privateKey.pem}
+
+app:
+  jwt:
+    issuer: ${JWT_ISSUER:https://redestudio.com.br}
+    expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
+    private-key-location: ${JWT_PRIVATE_KEY_LOCATION:privateKey.pem}
+
+  admin:
+    email: ${ADMIN_EMAIL:john.doe@redestudio.local}
+    username: ${ADMIN_USERNAME:johndoe}
+    password: ${ADMIN_PASSWORD:Admin@2024!}
+
+  # Client IDs dos provedores de login social — públicos por natureza (vão
+  # no ID token e no HTML do frontend), por isso ficam aqui e não no Vault
+  # (ver secrets-handling.md). Usados só pra validar o claim "aud" do ID
+  # token recebido — nenhum client secret é necessário nesse fluxo.
+  oauth:
+    google-client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    microsoft-client-id: ${MICROSOFT_OAUTH_CLIENT_ID:}
+
+# =============================================================
+#  Profile: %dev — local Docker Compose
+# =============================================================
+"%dev":
+  quarkus:
+    mongodb:
+      connection-string: mongodb://mongo:27017
+      database: rede_studio_dev
+
+    redis:
+      hosts: redis://redis:6379
+
+    mailer:
+      mock: true
+
+    log:
+      level: DEBUG
+      console:
+        format: "%d{HH:mm:ss} %-5p [%c{2.}] %s%e%n"
+      category:
+        "io.quarkus":
+          level: INFO
+        "org.mongodb.driver":
+          level: WARN
+        "com.mongodb":
+          level: WARN
+
+    swagger-ui:
+      always-include: true
+
+  mp:
+    jwt:
+      verify:
+        publickey:
+          location: file:/run/secrets/jwt/publicKey.pem
+        issuer: https://redestudio.local
+
+  rabbitmq-host: rabbitmq
+  rabbitmq-port: 5672
+  rabbitmq-username: redestudio
+  rabbitmq-password: dev_secret_change_me
+
+  smallrye:
+    jwt:
+      sign:
+        key:
+          location: file:/run/secrets/jwt/privateKey.pem
+
+  app:
+    jwt:
+      issuer: https://redestudio.local
+      expiration-seconds: 86400
+      private-key-location: file:/run/secrets/jwt/privateKey.pem
+
+# =============================================================
+#  Profile: %master — AWS + MongoDB Atlas
+# =============================================================
+"%master":
+  quarkus:
+    mongodb:
+      connection-string: ${MONGODB_URI}
+      database: ${MONGODB_DATABASE}
+
+    redis:
+      hosts: ${REDIS_URL}
+
+    mailer:
+      mock: false
+      from: ${MAIL_FROM}
+      host: ${MAIL_SMTP_HOST}
+      port: ${MAIL_SMTP_PORT:587}
+      username: ${MAIL_SMTP_USERNAME}
+      password: ${MAIL_SMTP_PASSWORD}
+      start-tls: REQUIRED
+      auth-methods: PLAIN
+
+    log:
+      level: WARN
+      console:
+        json: true
+
+    http:
+      cors:
+        origins: ${CORS_ORIGINS}
+
+    swagger-ui:
+      always-include: false
+
+  mp:
+    jwt:
+      verify:
+        publickey:
+          location: ${JWT_PUBLIC_KEY_LOCATION}
+        issuer: ${JWT_ISSUER}
+
+  rabbitmq-host: ${RABBITMQ_HOST}
+  rabbitmq-port: ${RABBITMQ_PORT:5672}
+  rabbitmq-username: ${RABBITMQ_USERNAME}
+  rabbitmq-password: ${RABBITMQ_PASSWORD}
+
+  smallrye:
+    jwt:
+      sign:
+        key:
+          location: ${JWT_PRIVATE_KEY_LOCATION}
+
+  app:
+    jwt:
+      issuer: ${JWT_ISSUER}
+      expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
+      private-key-location: ${JWT_PRIVATE_KEY_LOCATION}
+
+    admin:
+      email: ${ADMIN_EMAIL}
+      username: ${ADMIN_USERNAME}
+      password: ${ADMIN_PASSWORD}

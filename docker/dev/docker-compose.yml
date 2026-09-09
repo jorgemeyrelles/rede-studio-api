@@ -1,0 +1,196 @@
+# =============================================================
+#  Rede Studio API — Dev Stack
+#  Serviços: MongoDB · RabbitMQ · Redis · API Quarkus · Nginx ·
+#            Prometheus · Grafana
+#
+#  Pré-requisitos:
+#    1. Gere as chaves JWT: bash ../../generate-jwt-keys.sh
+#    2. Configure as variáveis: ../../.env.dev (já incluído no repo)
+#
+#  Subir: docker compose up --build
+#  Parar: docker compose down
+#  Limpar volumes: docker compose down -v
+# =============================================================
+
+services:
+
+  # ------------------------------------------------------------
+  #  MongoDB 7 — banco de dados principal
+  # ------------------------------------------------------------
+  mongo:
+    image: mongo:7
+    container_name: rede-studio-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: rede_studio_dev
+    ports:
+      - "27018:27017"   # 27017 ocupado pelo MongoDB local do SO → usar 27018
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - rede-studio-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ------------------------------------------------------------
+  #  RabbitMQ — fila de mensageria (emails, escrita idempotente)
+  # ------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rede-studio-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-redestudio}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-dev_secret_change_me}
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI (http://localhost:15672)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - rede-studio-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ------------------------------------------------------------
+  #  Redis — deduplicação/idempotência (LB → Redis → fila → BD)
+  # ------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: rede-studio-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rede-studio-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ------------------------------------------------------------
+  #  Quarkus API
+  # ------------------------------------------------------------
+  rede-studio-api:
+    build:
+      context: ../../
+      dockerfile: src/main/docker/Dockerfile.jvm
+    image: rede-studio-api:dev
+    container_name: rede-studio-api
+    restart: unless-stopped
+    env_file: ../../.env.dev
+    environment:
+      QUARKUS_PROFILE: dev
+    ports:
+      - "8080:8080"   # Acesso direto — Swagger UI sem passar pelo Nginx
+    volumes:
+      - ../../secrets:/run/secrets/jwt:ro
+    networks:
+      - rede-studio-net
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/q/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ------------------------------------------------------------
+  #  Nginx — proxy reverso com rate limiting e segurança
+  #  Expõe porta 80 → roteia para a API na porta 8080
+  # ------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: rede-studio-nginx
+    restart: unless-stopped
+    ports:
+      - "8090:80"   # host:8090 → Nginx:80 (evita conflito com porta 80 do SO)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - rede-studio-net
+    depends_on:
+      rede-studio-api:
+        condition: service_healthy
+
+  # ------------------------------------------------------------
+  #  Prometheus — coleta métricas de /q/metrics
+  # ------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: rede-studio-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"   # Prometheus UI direto do host
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - rede-studio-net
+    depends_on:
+      - rede-studio-api
+
+  # ------------------------------------------------------------
+  #  Grafana — dashboards de observabilidade
+  #  Acesso: http://localhost:3000  (admin/admin em dev)
+  # ------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: rede-studio-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - rede-studio-net
+    depends_on:
+      - prometheus
+
+# ------------------------------------------------------------
+#  Rede interna — isolamento entre serviços
+# ------------------------------------------------------------
+networks:
+  rede-studio-net:
+    driver: bridge
+
+# ------------------------------------------------------------
+#  Volumes persistentes
+# ------------------------------------------------------------
+volumes:
+  mongo_data:
+  rabbitmq_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:

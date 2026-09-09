@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: rede-studio-monitor
+    env: dev
+
+scrape_configs:
+  # Coleta métricas da API Quarkus (Micrometer → /q/metrics)
+  - job_name: rede-studio-api
+    scrape_interval: 10s
+    metrics_path: /q/metrics
+    static_configs:
+      - targets:
+          - rede-studio-api:8080
+        labels:
+          service: rede-studio-api
+          profile: dev
+
+  # Auto-monitoramento do próprio Prometheus
+  - job_name: prometheus
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - localhost:9090

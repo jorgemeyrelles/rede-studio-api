@@ -1,0 +1,165 @@
+#!/bin/bash
+#
+# user-data.sh — provisionamento da EC2 rede-studio (Bootstrap)
+#
+# Executado UMA UNICA VEZ no primeiro boot.
+# Logs: /var/log/cloud-init-output.log
+#
+set -euxo pipefail
+
+exec > >(tee /var/log/rede-studio-bootstrap.log) 2>&1
+
+echo "===== [1/7] Atualizacao do sistema ====="
+dnf update -y
+dnf install -y java-21-amazon-corretto-headless nginx jq awscli amazon-ssm-agent tar gzip
+
+systemctl enable --now amazon-ssm-agent
+
+echo "===== [2/7] Estrutura de diretorios ====="
+mkdir -p /opt/rede-studio/{secrets,app,logs}
+useradd -r -s /sbin/nologin -d /opt/rede-studio redestudio || true
+
+echo "===== [3/7] Buscar secrets do AWS Secrets Manager ====="
+aws secretsmanager get-secret-value \
+  --secret-id "${secrets_id}" \
+  --region "${aws_region}" \
+  --query SecretString --output text \
+  > /opt/rede-studio/secrets/app.json
+
+MONGODB_URI=$(jq -r '.MONGODB_URI' /opt/rede-studio/secrets/app.json)
+jq -r '.JWT_PRIVATE_KEY_B64' /opt/rede-studio/secrets/app.json | base64 -d > /opt/rede-studio/secrets/privateKey.pem
+jq -r '.JWT_PUBLIC_KEY_B64'  /opt/rede-studio/secrets/app.json | base64 -d > /opt/rede-studio/secrets/publicKey.pem
+ADMIN_EMAIL=$(jq -r '.ADMIN_EMAIL'    /opt/rede-studio/secrets/app.json)
+ADMIN_USER=$(jq  -r '.ADMIN_USERNAME' /opt/rede-studio/secrets/app.json)
+ADMIN_PASS=$(jq  -r '.ADMIN_PASSWORD' /opt/rede-studio/secrets/app.json)
+
+echo "===== [4/7] Env file ====="
+cat >/opt/rede-studio/env <<EOF
+QUARKUS_PROFILE=master
+MONGODB_DATABASE=${mongodb_database}
+MONGODB_URI=$MONGODB_URI
+JWT_KEYS_DIR=/opt/rede-studio/secrets
+JWT_PRIVATE_KEY_LOCATION=/opt/rede-studio/secrets/privateKey.pem
+JWT_PUBLIC_KEY_LOCATION=/opt/rede-studio/secrets/publicKey.pem
+JWT_ISSUER=${jwt_issuer}
+JWT_EXPIRATION_SECONDS=${jwt_expiration_seconds}
+CORS_ORIGINS=${cors_origins}
+QUARKUS_HTTP_HOST=127.0.0.1
+QUARKUS_HTTP_PORT=${app_port}
+ADMIN_EMAIL=$ADMIN_EMAIL
+ADMIN_USERNAME=$ADMIN_USER
+ADMIN_PASSWORD=$ADMIN_PASS
+EOF
+chmod 640 /opt/rede-studio/env
+
+echo "===== [5/7] Baixar JAR do S3 (se existir) ====="
+if aws s3 ls "s3://${artifacts_bucket}/quarkus-app.tar.gz" --region "${aws_region}" >/dev/null 2>&1; then
+  aws s3 cp "s3://${artifacts_bucket}/quarkus-app.tar.gz" /tmp/quarkus-app.tar.gz --region "${aws_region}"
+  tar -xzf /tmp/quarkus-app.tar.gz -C /opt/rede-studio/app/
+else
+  echo "AVISO: artefato ainda nao publicado. Faca o deploy depois."
+fi
+
+chown -R redestudio:redestudio /opt/rede-studio
+chmod 600 /opt/rede-studio/secrets/*
+
+echo "===== [6/7] systemd unit ====="
+cat >/etc/systemd/system/rede-studio.service <<'EOF'
+[Unit]
+Description=Rede Studio API (Quarkus)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=redestudio
+Group=redestudio
+WorkingDirectory=/opt/rede-studio/app/quarkus-app
+EnvironmentFile=/opt/rede-studio/env
+# Tuning para instancia burstable (t3.micro, 2 vCPU / 1 GB):
+#   -XX:+UseSerialGC        -> GC single-thread; elimina threads de GC paralelo
+#                              (G1) que queimam CPU de background no ocioso.
+#   -XX:TieredStopAtLevel=1 -> limita o JIT ao compilador C1; corta a CPU do
+#                              compilador C2 em background (ganho grande p/ baixo trafego).
+#   -Xmx256m                -> heap enxuto; Quarkus opera folgado nesse limite.
+#   -XX:+ExitOnOutOfMemoryError -> falha rapida (systemd reinicia) em vez de travar.
+# Efeito: consumo de CPU ocioso cai bem abaixo do baseline do t3, permitindo
+# rodar em modo de creditos "standard" sem cobranca de surplus.
+ExecStart=/usr/bin/java -Xmx256m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:+ExitOnOutOfMemoryError -jar /opt/rede-studio/app/quarkus-app/quarkus-run.jar
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/rede-studio/logs/app.log
+StandardError=append:/opt/rede-studio/logs/app.log
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable rede-studio
+if [ -f /opt/rede-studio/app/quarkus-app/quarkus-run.jar ]; then
+  systemctl start rede-studio
+fi
+
+echo "===== [7/7] Nginx reverse proxy ====="
+
+# Substitui nginx.conf por uma versao minima (sem server default) — evita conflito com api.conf
+cat >/etc/nginx/nginx.conf <<'EOF'
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log notice;
+pid /run/nginx.pid;
+include /usr/share/nginx/modules/*.conf;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile            on;
+    tcp_nopush          on;
+    keepalive_timeout   65;
+    types_hash_max_size 4096;
+
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+EOF
+
+cat >/etc/nginx/conf.d/api.conf <<'EOF'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    # Aumentar buffer para headers JWT longos
+    large_client_header_buffers 4 16k;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout    60s;
+    }
+}
+EOF
+
+rm -f /etc/nginx/conf.d/default.conf
+
+nginx -t
+systemctl enable --now nginx
+
+echo "===== BOOTSTRAP CONCLUIDO ====="

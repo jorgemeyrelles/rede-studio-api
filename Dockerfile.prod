@@ -1,0 +1,65 @@
+# =============================================================
+#  Dockerfile.prod — Imagem de produção para AWS ECS
+#
+#  Diferenças em relação ao Dockerfile.jvm (dev):
+#    - Perfil forçado para "master" (sem Swagger, logs JSON)
+#    - Chaves JWT recebidas via env vars (AWS Secrets Manager)
+#      JWT_PRIVATE_KEY_B64 e JWT_PUBLIC_KEY_B64: conteúdo PEM
+#      codificado em base64; o entrypoint decodifica antes de iniciar
+#    - Sem volume mount de secrets — compatível com ECS Fargate/EC2
+#    - JAVA_OPTS ajustados para container com limite de memória
+#
+#  Build:
+#    mvn package -DskipTests
+#    docker build -f Dockerfile.prod -t rede-studio-api:prod .
+#
+#  Variáveis de ambiente obrigatórias (ECS Task Definition):
+#    QUARKUS_PROFILE           = master
+#    MONGODB_URI               = mongodb://<host>:27017
+#    MONGODB_DATABASE          = rede_studio_prod
+#    JWT_ISSUER                = https://api.seudominio.com
+#    JWT_EXPIRATION_SECONDS    = 86400
+#    JWT_PRIVATE_KEY_B64       = <base64 do privateKey.pem>
+#    JWT_PUBLIC_KEY_B64        = <base64 do publicKey.pem>
+#    CORS_ORIGINS              = https://app.seudominio.com
+#    ADMIN_EMAIL               = admin@seudominio.com
+#    ADMIN_USERNAME            = adminuser
+#    ADMIN_PASSWORD            = <senha forte>
+# =============================================================
+
+FROM eclipse-temurin:21-jre-alpine
+
+ENV QUARKUS_PROFILE=master
+
+# Diretório onde as chaves PEM serão escritas em runtime pelo entrypoint
+# Usa /tmp pois o container roda como não-root (UID 185) sem acesso a /run
+ENV JWT_KEYS_DIR=/tmp/jwt
+
+# Instala curl para healthcheck do ECS/ALB
+RUN apk add --no-cache curl
+
+# Cria usuário não-root com UID 185 (mesmo UID da imagem anterior)
+RUN addgroup -S jboss && adduser -S -u 185 -G jboss jboss
+
+EXPOSE 8080
+
+# Camadas separadas para maximizar cache no ECR push incremental
+COPY --chown=185:jboss target/quarkus-app/lib/     /deployments/lib/
+COPY --chown=185:jboss target/quarkus-app/*.jar    /deployments/
+COPY --chown=185:jboss target/quarkus-app/app/     /deployments/app/
+COPY --chown=185:jboss target/quarkus-app/quarkus/ /deployments/quarkus/
+
+# Script de entrypoint: decodifica as chaves base64 e inicia a JVM
+COPY --chown=185:jboss docker/prod/entrypoint.sh /deployments/entrypoint.sh
+RUN chmod +x /deployments/entrypoint.sh
+
+WORKDIR /deployments
+
+USER 185
+
+# Nota: -Djava.util.logging.manager NAO deve ser passado como arg JVM em Alpine.
+# O QuarkusEntryPoint configura o JBoss LogManager internamente via System.setProperty
+# antes de qualquer uso do JUL. Passar via -D causa falha no bootstrap classloader.
+ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -XX:MaxRAMPercentage=75.0"
+
+ENTRYPOINT ["/deployments/entrypoint.sh"]

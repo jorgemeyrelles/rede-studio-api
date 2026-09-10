@@ -107,7 +107,7 @@ resource "oci_core_instance" "api" {
       region                 = var.region
       secret_id              = oci_vault_secret.app.id
       artifacts_bucket       = oci_objectstorage_bucket.artifacts.name
-      namespace              = data.oci_objectstorage_namespace.ns.namespace
+      namespace              = local.object_storage_namespace
       mongodb_database       = var.mongodb_database
       jwt_issuer             = var.jwt_issuer
       jwt_expiration_seconds = var.jwt_expiration_seconds

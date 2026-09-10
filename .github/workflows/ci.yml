@@ -72,6 +72,20 @@ jobs:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
+    # terraform.tfvars é gitignored (só local) e supre 4 variáveis sem
+    # default em variables.tf (tenancy_ocid, jwt_issuer, duckdns_hostname,
+    # letsencrypt_email) — sem elas, "terraform apply" fica preso
+    # esperando input interativo que nunca chega num runner de CI.
+    # Nenhuma delas é secret de verdade (identificadores/URLs públicos),
+    # exceto tenancy_ocid, que já existe como secret (reaproveitado do
+    # passo de credenciais OCI abaixo). TF_VAR_<nome> é lido
+    # automaticamente pelo Terraform, sem precisar de -var/-var-file.
+    env:
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_CLI_TENANCY }}
+      TF_VAR_jwt_issuer: ${{ vars.TF_JWT_ISSUER }}
+      TF_VAR_duckdns_hostname: ${{ vars.TF_DUCKDNS_HOSTNAME }}
+      TF_VAR_letsencrypt_email: ${{ vars.TF_LETSENCRYPT_EMAIL }}
+
     steps:
       - uses: actions/checkout@v4
 

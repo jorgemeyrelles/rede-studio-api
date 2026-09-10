@@ -78,10 +78,12 @@ jobs:
     # esperando input interativo que nunca chega num runner de CI.
     # Nenhuma delas é secret de verdade (identificadores/URLs públicos),
     # exceto tenancy_ocid, que já existe como secret (reaproveitado do
-    # passo de credenciais OCI abaixo). TF_VAR_<nome> é lido
-    # automaticamente pelo Terraform, sem precisar de -var/-var-file.
+    # passo de credenciais OCI abaixo, sanitizado no passo "Set Terraform
+    # variables" — TF_VAR_tenancy_ocid é lido cru pelo Terraform, sem o
+    # trim automático que um arquivo ~/.oci/config ganha ao ser
+    # parseado, então um espaço/quebra de linha sobrando no secret já
+    # é o bastante pra OCI rejeitar como "compartment ID inválido").
     env:
-      TF_VAR_tenancy_ocid: ${{ secrets.OCI_CLI_TENANCY }}
       TF_VAR_jwt_issuer: ${{ vars.TF_JWT_ISSUER }}
       TF_VAR_duckdns_hostname: ${{ vars.TF_DUCKDNS_HOSTNAME }}
       TF_VAR_letsencrypt_email: ${{ vars.TF_LETSENCRYPT_EMAIL }}
@@ -94,6 +96,12 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+
+      - name: Set sanitized Terraform variables
+        run: |
+          echo "TF_VAR_tenancy_ocid=$(printf '%s' "$OCI_CLI_TENANCY" | tr -d '[:space:]')" >> "$GITHUB_ENV"
+        env:
+          OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
 
       # Mesmo modelo de autenticação já usado localmente (~/.oci/config,
       # API Key) — só que com uma identidade própria da CI

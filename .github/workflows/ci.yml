@@ -43,6 +43,19 @@ jobs:
           java-version: "21"
           cache: maven
 
+      # src/test/resources/{privateKey,publicKey}.pem nunca foram
+      # commitados — o .gitignore do projeto exclui *.pem/*.key de
+      # propósito (protege as chaves de PRODUÇÃO, geradas por
+      # generate-jwt-keys.sh), o que também pegou essas chaves de teste
+      # fixas. Só existiam no disco de quem já tinha rodado os testes
+      # localmente antes; um checkout novo (aqui, ou um clone fresco
+      # local) não tem elas. Geradas aqui, descartáveis, nunca
+      # commitadas — mesmo comando do generate-jwt-keys.sh (RSA-2048).
+      - name: Generate test JWT keys
+        run: |
+          openssl genrsa -out src/test/resources/privateKey.pem 2048
+          openssl rsa -in src/test/resources/privateKey.pem -pubout -out src/test/resources/publicKey.pem
+
       # Mongo/Redis/RabbitMQ como services: (não Quarkus Dev Services) —
       # `application.yml` já define um host default explícito pros três,
       # então o Dev Services nem sempre trata isso como "não configurado"

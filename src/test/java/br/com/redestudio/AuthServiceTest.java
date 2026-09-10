@@ -53,12 +53,11 @@ class AuthServiceTest {
         assertEquals("svcregister", response.getUsername());
         assertTrue(response.getRoles().contains("USER"));
 
-        var saved = userRepository.findByEmail("svc-register@test.local");
-        assertTrue(saved.isPresent(), "User must be persisted in MongoDB");
-        assertTrue(saved.get().isActive());
-        assertNotNull(saved.get().getCreatedAt());
+        var saved = waitFor(() -> userRepository.findByEmail("svc-register@test.local"));
+        assertTrue(saved.isActive());
+        assertNotNull(saved.getCreatedAt());
         // Password must be hashed — never stored as plain text
-        assertFalse(saved.get().getPasswordHash().startsWith("Password"),
+        assertFalse(saved.getPasswordHash().startsWith("Password"),
                 "Password must be stored as BCrypt hash, not plain text");
     }
 

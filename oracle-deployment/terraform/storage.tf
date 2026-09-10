@@ -12,4 +12,14 @@ resource "oci_objectstorage_bucket" "artifacts" {
   name           = "rede-studio-artifacts"
   access_type    = "NoPublicAccess"
   versioning     = "Enabled"
+
+  # namespace é fixo por tenancy (nunca muda depois de atribuído) — uma
+  # vez que o bucket já existe, não faz sentido reavaliar essa data
+  # source toda vez (achamos um caso real em CI onde isso quebrava o
+  # plan com "Missing required argument: namespace" mesmo com a leitura
+  # da data source aparentemente OK — não vale a pena depender disso
+  # pra um valor que é imutável de qualquer forma).
+  lifecycle {
+    ignore_changes = [namespace]
+  }
 }

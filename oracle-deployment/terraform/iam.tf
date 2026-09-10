@@ -28,3 +28,20 @@ resource "oci_identity_policy" "api" {
     "Allow group 'Default'/'ci-deployers' to manage all-resources in compartment rede-studio-api",
   ]
 }
+
+# O bucket "rede-studio-tfstate" (state remoto do Terraform, ver
+# provider.tf) foi criado manualmente na RAIZ da tenancy, antes do
+# compartimento rede-studio-api existir — não está dentro dele. Uma
+# policy anexada num compartimento não alcança escopo fora dele (nem que
+# o texto diga "in tenancy" — é uma proteção da própria OCI contra
+# escalonamento de privilégio), então essa permissão precisa de uma
+# policy própria, anexada na raiz.
+resource "oci_identity_policy" "ci_tfstate" {
+  compartment_id = var.tenancy_ocid
+  name           = "rede-studio-ci-tfstate-policy"
+  description    = "Permite a CI (GitHub Actions) ler/escrever o state remoto do Terraform"
+
+  statements = [
+    "Allow group 'Default'/'ci-deployers' to manage objects in tenancy where target.bucket.name = 'rede-studio-tfstate'",
+  ]
+}

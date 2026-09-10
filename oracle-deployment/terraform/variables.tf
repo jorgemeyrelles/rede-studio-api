@@ -89,3 +89,15 @@ variable "letsencrypt_email" {
   type        = string
   default     = ""
 }
+
+variable "alert_email" {
+  description = "E-mail que recebe o alarme do OCI Monitoring quando o backend do LB fica unhealthy (precisa confirmar a inscrição uma vez, via link que a OCI manda pra esse e-mail)."
+  type        = string
+  default     = "jotaengpuc@gmail.com"
+}
+
+variable "ops_ssh_public_key" {
+  description = "Chave(s) pública(s) SSH autorizada(s) a logar como 'ubuntu' via sessão Bastion Port Forwarding — só pra debug manual (ler logs etc.), nunca faz parte do caminho de deploy (isso é via credencial de API da OCI). Uma por linha se for mais de uma. Deixe vazio pra não autorizar nenhuma."
+  type        = string
+  default     = ""
+}

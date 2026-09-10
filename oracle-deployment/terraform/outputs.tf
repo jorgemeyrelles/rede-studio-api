@@ -27,6 +27,11 @@ output "rabbitmq_private_ip" {
   value       = oci_core_instance.rabbitmq.private_ip
 }
 
+output "lb_public_ip" {
+  description = "IP publico fixo do Load Balancer — DNS (DuckDNS) deve apontar pra este, nao mais pro IP da VM"
+  value       = oci_core_public_ip.lb.ip_address
+}
+
 output "bastion_id" {
   description = "OCID do Bastion"
   value       = oci_bastion_bastion.main.id

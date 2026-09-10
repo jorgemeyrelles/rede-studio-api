@@ -2,6 +2,7 @@ package br.com.redestudio;
 
 import br.com.redestudio.dtos.request.LoginRequest;
 import br.com.redestudio.dtos.request.RegisterRequest;
+import br.com.redestudio.entities.UserEntity;
 import br.com.redestudio.exceptions.InvalidCredentialsException;
 import br.com.redestudio.exceptions.UserAlreadyExistsException;
 import br.com.redestudio.repositories.UserRepository;
@@ -9,6 +10,9 @@ import br.com.redestudio.services.AuthService;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
+
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -18,6 +22,12 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>Each test uses a unique email to avoid collision with {@code AuthControllerTest},
  * which shares the same application instance (and database) during the test run.
+ *
+ * <p>Registration is asynchronous (Redis → fila → BD, see {@link AuthService#register}),
+ * so a test that needs the document to already exist (to log in right after registering)
+ * polls for it via {@link #waitFor} instead of assuming it landed immediately — a real
+ * race hit in CI (GitHub Actions timing differs enough from local dev to surface it,
+ * see {@code AuthServiceOAuthTest} for the same fix applied to the OAuth flow).
  */
 @QuarkusTest
 class AuthServiceTest {
@@ -43,12 +53,11 @@ class AuthServiceTest {
         assertEquals("svcregister", response.getUsername());
         assertTrue(response.getRoles().contains("USER"));
 
-        var saved = userRepository.findByEmail("svc-register@test.local");
-        assertTrue(saved.isPresent(), "User must be persisted in MongoDB");
-        assertTrue(saved.get().isActive());
-        assertNotNull(saved.get().getCreatedAt());
+        var saved = waitFor(() -> userRepository.findByEmail("svc-register@test.local"));
+        assertTrue(saved.isActive());
+        assertNotNull(saved.getCreatedAt());
         // Password must be hashed — never stored as plain text
-        assertFalse(saved.get().getPasswordHash().startsWith("Password"),
+        assertFalse(saved.getPasswordHash().startsWith("Password"),
                 "Password must be stored as BCrypt hash, not plain text");
     }
 
@@ -77,6 +86,7 @@ class AuthServiceTest {
     @Test
     void login_validCredentials_returnsAuthResponseWithToken() {
         authService.register(new RegisterRequest("svclogin", "svc-login@test.local", "Password@Test1"));
+        waitFor(() -> userRepository.findByEmail("svc-login@test.local"));
 
         var login = new LoginRequest("svc-login@test.local", "Password@Test1");
         var response = authService.login(login);
@@ -99,5 +109,23 @@ class AuthServiceTest {
     void login_unknownEmail_throwsInvalidCredentialsException() {
         var login = new LoginRequest("nobody@test.local", "Password@Test1");
         assertThrows(InvalidCredentialsException.class, () -> authService.login(login));
+    }
+
+    /** Polls {@code lookup} until it resolves, up to 3s — see class javadoc. */
+    private static UserEntity waitFor(Supplier<Optional<UserEntity>> lookup) {
+        long deadline = System.currentTimeMillis() + 3000;
+        while (System.currentTimeMillis() < deadline) {
+            Optional<UserEntity> found = lookup.get();
+            if (found.isPresent()) {
+                return found.get();
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+        }
+        return fail("User document was not persisted within 3s of the async registration path");
     }
 }

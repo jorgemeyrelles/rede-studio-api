@@ -1,0 +1,123 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # src/test/resources/{privateKey,publicKey}.pem nunca foram
+      # commitados — o .gitignore do projeto exclui *.pem/*.key de
+      # propósito (protege as chaves de PRODUÇÃO, geradas por
+      # generate-jwt-keys.sh), o que também pegou essas chaves de teste
+      # fixas. Só existiam no disco de quem já tinha rodado os testes
+      # localmente antes; um checkout novo (aqui, ou um clone fresco
+      # local) não tem elas. Geradas aqui, descartáveis, nunca
+      # commitadas — mesmo comando do generate-jwt-keys.sh (RSA-2048).
+      - name: Generate test JWT keys
+        run: |
+          openssl genrsa -out src/test/resources/privateKey.pem 2048
+          openssl rsa -in src/test/resources/privateKey.pem -pubout -out src/test/resources/publicKey.pem
+
+      # Mongo/Redis/RabbitMQ como services: (não Quarkus Dev Services) —
+      # `application.yml` já define um host default explícito pros três,
+      # então o Dev Services nem sempre trata isso como "não configurado"
+      # e pode não provisionar nada sozinho (gotcha real, documentado no
+      # CLAUDE.md pra Redis/RabbitMQ; o Mongo se comportou igual num
+      # runner do GitHub Actions, mesmo funcionando via Dev Services
+      # localmente). Container real de verdade em vez de depender de
+      # ativação implícita evita essa incerteza de vez.
+      - name: Run tests
+        run: ./mvnw test
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Mesmo modelo de autenticação já usado localmente (~/.oci/config,
+      # API Key) — só que com uma identidade própria da CI
+      # (github-actions-ci), não a credencial pessoal de ninguém. Ver
+      # security.md pro passo a passo de como essa identidade foi criada.
+      - name: Configure OCI credentials
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+          OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.oci
+          umask 077
+          printf '%s' "$OCI_CLI_KEY_CONTENT" > ~/.oci/oci_api_key.pem
+          cat > ~/.oci/config <<EOF
+          [DEFAULT]
+          user=$OCI_CLI_USER
+          tenancy=$OCI_CLI_TENANCY
+          fingerprint=$OCI_CLI_FINGERPRINT
+          region=$OCI_CLI_REGION
+          key_file=~/.oci/oci_api_key.pem
+          EOF
+          pip install --user oci-cli
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: oracle-deployment/terraform
+        run: terraform init
+
+      # Reaproveita o script existente (já testado manualmente) em vez
+      # de duplicar a lógica de build+upload+apply em YAML.
+      - name: Build, upload and deploy
+        run: bash oracle-deployment/deploy-oracle.sh
+
+      - name: Smoke test
+        run: |
+          curl --fail --retry 10 --retry-delay 15 --retry-connrefused \
+            https://rede-studio-api.duckdns.org/q/health/live

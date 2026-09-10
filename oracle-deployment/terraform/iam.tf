@@ -15,10 +15,16 @@ resource "oci_identity_dynamic_group" "api" {
 resource "oci_identity_policy" "api" {
   compartment_id = oci_identity_compartment.app.id
   name           = "rede-studio-api-policy"
-  description    = "Permissões da VM: ler secret do Vault e objetos do bucket de artefatos"
+  description    = "Permissões da VM (dynamic group) e da CI (GitHub Actions) neste compartimento"
 
   statements = [
     "Allow dynamic-group ${oci_identity_dynamic_group.api.name} to read secret-family in compartment id ${oci_identity_compartment.app.id}",
     "Allow dynamic-group ${oci_identity_dynamic_group.api.name} to read objects in compartment id ${oci_identity_compartment.app.id} where target.bucket.name = '${oci_objectstorage_bucket.artifacts.name}'",
+    # CI/CD (.github/workflows/ci.yml) — usuário dedicado "github-actions-ci"
+    # no grupo "ci-deployers" (Identity Domain "Default", por isso a sintaxe
+    # 'Default'/'ci-deployers' — grupo de domínio, não IAM group clássico).
+    # Precisa de manage (não só use/read) pra recriar a VM via
+    # terraform apply -replace e subir o jar no Object Storage.
+    "Allow group 'Default'/'ci-deployers' to manage all-resources in compartment rede-studio-api",
   ]
 }

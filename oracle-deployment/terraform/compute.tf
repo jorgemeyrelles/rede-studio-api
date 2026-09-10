@@ -47,7 +47,7 @@ resource "oci_core_instance" "rabbitmq" {
   }
 
   metadata = {
-    ssh_authorized_keys = "" # acesso via Bastion (bastion.tf)
+    ssh_authorized_keys = var.ops_ssh_public_key # acesso via Bastion Port Forwarding (bastion.tf) — Managed SSH não funciona nesta shape
     user_data = base64encode(templatefile("${path.module}/templates/cloud-init-rabbitmq.sh.tftpl", {
       region    = var.region
       secret_id = oci_vault_secret.app.id
@@ -102,7 +102,7 @@ resource "oci_core_instance" "api" {
   }
 
   metadata = {
-    ssh_authorized_keys = "" # acesso é via Bastion (bastion.tf) — sem chave SSH direta
+    ssh_authorized_keys = var.ops_ssh_public_key # acesso via Bastion Port Forwarding (bastion.tf) — Managed SSH não funciona nesta shape
     user_data = base64encode(templatefile("${path.module}/templates/cloud-init-api.sh.tftpl", {
       region                 = var.region
       secret_id              = oci_vault_secret.app.id

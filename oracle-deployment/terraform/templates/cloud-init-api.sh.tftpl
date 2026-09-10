@@ -119,11 +119,29 @@ SCRAPEEOF
 # antes deste script sequer chegar na VM — a troca acontece no texto
 # bruto do template, independente de como o bash trataria aspas.
 cat >/opt/rede-studio/compose/nginx.conf <<'NGINXEOF'
+# Zona de rate limit e mapa de padroes suspeitos precisam estar no
+# contexto http{} -- esse arquivo eh incluido dentro dele via
+# conf.d/*.conf (ver docker-compose.prod.yml), entao declarar aqui no
+# topo (fora de qualquer server{}) funciona normalmente.
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+
+# Mitigacao BASICA de padroes obvios de injecao/XSS na querystring --
+# NAO substitui um WAF de verdade (nao eh Always Free, ver security.md).
+# So bloqueia o que e escancarado; nao inspeciona body nem headers.
+map $args $blocked_pattern {
+    default 0;
+    "~*(<script|%3cscript|onerror\s*=|onload\s*=|javascript:|union(\s|%20)+select|select.+from|drop\s+table|\.\./)" 1;
+}
+
 server {
     listen 80 default_server;
     server_name _;
 
     large_client_header_buffers 4 16k;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
     # Desafio HTTP-01 do Certbot (passo [6/9] abaixo) -- precisa estar
     # aqui mesmo antes do certificado existir, e continua aqui depois
@@ -133,6 +151,12 @@ server {
     }
 
     location / {
+        if ($blocked_pattern) {
+            return 403;
+        }
+
+        limit_req zone=api_limit burst=20 nodelay;
+
         proxy_pass         http://127.0.0.1:${app_port};
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
@@ -202,6 +226,17 @@ if [ "$CERTBOT_OK" = "1" ]; then
   # desafio acme-challenge continua disponivel na porta 80 (necessario
   # pras renovacoes futuras, que usam o mesmo metodo webroot).
   cat >/opt/rede-studio/compose/nginx.conf <<'NGINXEOF'
+# Ver comentario equivalente na versao pre-TLS deste arquivo (acima) --
+# mesmo raciocinio pro contexto http{} valer aqui tambem.
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+
+# Mitigacao BASICA de padroes obvios de injecao/XSS na querystring --
+# NAO substitui um WAF de verdade (nao eh Always Free, ver security.md).
+map $args $blocked_pattern {
+    default 0;
+    "~*(<script|%3cscript|onerror\s*=|onload\s*=|javascript:|union(\s|%20)+select|select.+from|drop\s+table|\.\./)" 1;
+}
+
 server {
     listen 80 default_server;
     server_name _;
@@ -224,7 +259,18 @@ server {
 
     large_client_header_buffers 4 16k;
 
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     location / {
+        if ($blocked_pattern) {
+            return 403;
+        }
+
+        limit_req zone=api_limit burst=20 nodelay;
+
         proxy_pass         http://127.0.0.1:${app_port};
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;

@@ -1,16 +1,23 @@
 package br.com.redestudio;
 
+import br.com.redestudio.entities.UserEntity;
+import br.com.redestudio.repositories.UserRepository;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.Optional;
+import java.util.function.Supplier;
+
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.Matchers.hasItem;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Integration tests for {@code AuthController} — exercises the full HTTP stack:
@@ -26,6 +33,9 @@ import static org.hamcrest.Matchers.hasItem;
 @QuarkusTest
 @TestMethodOrder(OrderAnnotation.class)
 class AuthControllerTest {
+
+    @Inject
+    UserRepository userRepository;
 
     // Unique email prefix to avoid collision with AuthServiceTest
     private static final String CTRL_REGISTER_EMAIL   = "ctrl-register@test.local";
@@ -135,6 +145,11 @@ class AuthControllerTest {
         .when()
             .post("/api/auth/register");
 
+        // Registro é assíncrono (Redis → fila → BD) — espera o documento
+        // existir antes de tentar logar, senão essa corrida derruba o
+        // teste de vez em quando (já aconteceu em CI, ver AuthServiceTest).
+        waitFor(() -> userRepository.findByEmail(CTRL_LOGIN_EMAIL));
+
         // Act + Assert
         given()
             .contentType(ContentType.JSON)
@@ -216,5 +231,23 @@ class AuthControllerTest {
         .then()
             .statusCode(400)
             .body("error", equalTo("VALIDATION_ERROR"));
+    }
+
+    /** Polls {@code lookup} until it resolves, up to 3s — ver {@link #login_validCredentials_returns200WithToken}. */
+    private static UserEntity waitFor(Supplier<Optional<UserEntity>> lookup) {
+        long deadline = System.currentTimeMillis() + 3000;
+        while (System.currentTimeMillis() < deadline) {
+            Optional<UserEntity> found = lookup.get();
+            if (found.isPresent()) {
+                return found.get();
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+        }
+        return fail("User document was not persisted within 3s of the async registration path");
     }
 }

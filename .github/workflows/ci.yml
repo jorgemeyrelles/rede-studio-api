@@ -11,6 +11,15 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       redis:
         image: redis:7-alpine
         ports:
@@ -34,12 +43,14 @@ jobs:
           java-version: "21"
           cache: maven
 
-      # MongoDB roda via Quarkus Dev Services (Testcontainers) — o runner
-      # do GitHub Actions já vem com Docker instalado, nenhuma config
-      # extra necessária. Redis/RabbitMQ acima são containers reais
-      # porque application.yml já define um host default explícito pros
-      # dois, então o Dev Services não os trata como "não configurados"
-      # e não os provisiona sozinho (gotcha documentado no CLAUDE.md).
+      # Mongo/Redis/RabbitMQ como services: (não Quarkus Dev Services) —
+      # `application.yml` já define um host default explícito pros três,
+      # então o Dev Services nem sempre trata isso como "não configurado"
+      # e pode não provisionar nada sozinho (gotcha real, documentado no
+      # CLAUDE.md pra Redis/RabbitMQ; o Mongo se comportou igual num
+      # runner do GitHub Actions, mesmo funcionando via Dev Services
+      # localmente). Container real de verdade em vez de depender de
+      # ativação implícita evita essa incerteza de vez.
       - name: Run tests
         run: ./mvnw test
 

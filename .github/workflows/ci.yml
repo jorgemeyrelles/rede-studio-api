@@ -90,12 +90,48 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # precisa do histórico pra "git diff" detectar mudança de infra, abaixo
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
+
+      # Recriar a VM (ou qualquer outro apply) a cada push, mesmo quando só
+      # o código Java mudou, já causou um incidente real: cada recriação
+      # forçava o Certbot a reemitir o certificado TLS, e o Let's Encrypt só
+      # permite 5 emissões por domínio a cada 168h — poucos deploys seguidos
+      # no mesmo dia esgotavam essa cota e a API ficava sem HTTPS (ver
+      # oracle-deployment/deploy-oracle.sh). Terraform só deve rodar quando
+      # os arquivos de infra realmente mudaram nesse push.
+      - name: Detectar mudança de infraestrutura
+        id: infra
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" "${{ github.sha }}" | grep -q '^oracle-deployment/terraform/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Chave dedicada à CI (nunca a pessoal de ninguém) — autorizada na VM
+      # via ci_ssh_public_key (terraform/variables.tf), usada só pelo
+      # deploy-oracle.sh pra reiniciar o serviço via Bastion Port Forwarding,
+      # sem recriar a instância. A pública é derivada aqui em vez de viver
+      # num secret/variable própria, pra não ter duas fontes de verdade.
+      - name: Configurar chave SSH da CI
+        env:
+          CI_SSH_PRIVATE_KEY: ${{ secrets.CI_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          umask 077
+          printf '%s\n' "$CI_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519_ci_rede_studio
+          ssh-keygen -y -f ~/.ssh/id_ed25519_ci_rede_studio > ~/.ssh/id_ed25519_ci_rede_studio.pub
+          echo "TF_VAR_ci_ssh_public_key=$(cat ~/.ssh/id_ed25519_ci_rede_studio.pub)" >> "$GITHUB_ENV"
 
       - name: Set sanitized Terraform variables
         run: |
@@ -134,8 +170,22 @@ jobs:
         working-directory: oracle-deployment/terraform
         run: terraform init
 
-      # Reaproveita o script existente (já testado manualmente) em vez
-      # de duplicar a lógica de build+upload+apply em YAML.
+      # Sem -replace -- o próprio Terraform decide o que precisa mudar (só
+      # recria a instância se o cloud-init realmente mudou, via
+      # replace_triggered_by em compute.tf). Só roda quando este push
+      # tocou oracle-deployment/terraform/ (passo "Detectar mudança de
+      # infraestrutura" acima) -- uma atualização de código sozinha nunca
+      # chega aqui.
+      - name: Terraform apply (infraestrutura)
+        if: steps.infra.outputs.changed == 'true'
+        working-directory: oracle-deployment/terraform
+        run: terraform apply -auto-approve
+
+      # Reaproveita o script existente (já testado manualmente) em vez de
+      # duplicar a lógica de build+upload+restart em YAML. Roda sempre --
+      # se o passo acima acabou de recriar a VM, o cloud-init dela já
+      # baixa o JAR mais recente sozinho; se não, este script builda, sobe
+      # o artefato novo e reinicia o serviço via SSH (sem tocar na VM).
       - name: Build, upload and deploy
         run: bash oracle-deployment/deploy-oracle.sh
 

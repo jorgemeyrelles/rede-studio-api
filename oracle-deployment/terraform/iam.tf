@@ -19,7 +19,15 @@ resource "oci_identity_policy" "api" {
 
   statements = [
     "Allow dynamic-group ${oci_identity_dynamic_group.api.name} to read secret-family in compartment id ${oci_identity_compartment.app.id}",
-    "Allow dynamic-group ${oci_identity_dynamic_group.api.name} to read objects in compartment id ${oci_identity_compartment.app.id} where target.bucket.name = '${oci_objectstorage_bucket.artifacts.name}'",
+    # "manage" (não só "read") porque a VM agora também escreve o backup
+    # do certificado TLS nesse bucket (letsencrypt-backup.tar.gz) — ver
+    # cloud-init-api.sh.tftpl. Sem persistir o certificado entre
+    # recriações de VM, cada "-replace" força uma emissão nova no
+    # Let's Encrypt, que só permite 5 por domínio a cada 168h — batemos
+    # nesse limite de verdade em 2026-09 depois de várias recriações
+    # seguidas durante um debug, e o mesmo aconteceria a cada poucos
+    # deploys via CI/CD sem esse backup.
+    "Allow dynamic-group ${oci_identity_dynamic_group.api.name} to manage objects in compartment id ${oci_identity_compartment.app.id} where target.bucket.name = '${oci_objectstorage_bucket.artifacts.name}'",
     # CI/CD (.github/workflows/ci.yml) — usuário dedicado "github-actions-ci"
     # no grupo "ci-deployers" (Identity Domain "Default", por isso a sintaxe
     # 'Default'/'ci-deployers' — grupo de domínio, não IAM group clássico).

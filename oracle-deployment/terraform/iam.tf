@@ -51,5 +51,18 @@ resource "oci_identity_policy" "ci_tfstate" {
 
   statements = [
     "Allow group 'Default'/'ci-deployers' to manage objects in tenancy where target.bucket.name = 'rede-studio-tfstate'",
+    # Sem isso, todo "terraform apply" da CI falha: oci_identity_dynamic_group.api e
+    # este próprio oci_identity_policy.ci_tfstate moram na raiz da tenancy (não no
+    # compartimento rede-studio-api), e a policy acima só cobre "in compartment
+    # rede-studio-api" -- a CI não conseguia nem LER esses dois na raiz. A OCI
+    # devolve 404 (não 403) numa leitura sem permissão, e o Terraform interpreta
+    # isso como "recurso deletado por fora" -- removia os dois do state a cada
+    # refresh e tentava recriar, o que também falhava (mesma falta de permissão
+    # pra criar). Só "read" (não "manage") de propósito: o suficiente pro refresh
+    # funcionar, sem dar à CI poder de criar/alterar IAM na raiz da tenancy.
+    # Mudança real nesses 2 recursos continua exigindo apply manual (credencial
+    # pessoal, mais ampla) -- incidente real, 2026-09.
+    "Allow group 'Default'/'ci-deployers' to read dynamic-groups in tenancy",
+    "Allow group 'Default'/'ci-deployers' to read policies in tenancy",
   ]
 }

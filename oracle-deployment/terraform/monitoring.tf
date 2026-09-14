@@ -36,5 +36,12 @@ resource "oci_monitoring_alarm" "api_backend_unhealthy" {
   is_enabled            = true
   pending_duration      = "PT1M"
   body                  = "Backend da API (porta 443) ficou unhealthy no Load Balancer rede-studio-lb — provavelmente app ou VM caiu."
-  repeat_notification_duration = "PT30M"
+  # "" (nao omitir -- o atributo eh Optional+Computed no provider da OCI,
+  # entao so remover a linha nao gera diff nenhum, o valor antigo fica
+  # "grudado" no state) notifica so na MUDANCA de estado (OK->FIRING e
+  # FIRING->OK), uma vez cada. Com "PT30M" (valor anterior), reenviava o
+  # mesmo alerta a cada 30min inteiro enquanto o alarme seguisse firing --
+  # o que aconteceu de verdade em 2026-09 enquanto o backend 443 ficou sem
+  # certificado TLS esperando o rate limit do Let's Encrypt liberar.
+  repeat_notification_duration = ""
 }

@@ -97,7 +97,13 @@ variable "alert_email" {
 }
 
 variable "ops_ssh_public_key" {
-  description = "Chave(s) pública(s) SSH autorizada(s) a logar como 'ubuntu' via sessão Bastion Port Forwarding — só pra debug manual (ler logs etc.), nunca faz parte do caminho de deploy (isso é via credencial de API da OCI). Uma por linha se for mais de uma. Deixe vazio pra não autorizar nenhuma."
+  description = "Chave(s) pública(s) SSH autorizada(s) a logar como 'ubuntu' via sessão Bastion Port Forwarding — pra debug manual (ler logs etc.). Uma por linha se for mais de uma. Deixe vazio pra não autorizar nenhuma."
+  type        = string
+  default     = ""
+}
+
+variable "ci_ssh_public_key" {
+  description = "Chave pública SSH dedicada à CI (GitHub Actions), separada de ops_ssh_public_key — usada só pelo job de deploy pra reiniciar o serviço via Bastion Port Forwarding sem recriar a VM (ver oracle-deployment/deploy-oracle.sh). A privada correspondente vive no secret CI_SSH_PRIVATE_KEY do repositório, nunca em disco fora da CI."
   type        = string
   default     = ""
 }

@@ -102,7 +102,11 @@ resource "oci_core_instance" "api" {
   }
 
   metadata = {
-    ssh_authorized_keys = var.ops_ssh_public_key # acesso via Bastion Port Forwarding (bastion.tf) — Managed SSH não funciona nesta shape
+    # ops_ssh_public_key: debug manual. ci_ssh_public_key: usada pelo job de
+    # deploy da CI pra reiniciar o servico sem recriar a VM (ver
+    # oracle-deployment/deploy-oracle.sh) — acesso via Bastion Port
+    # Forwarding (bastion.tf), Managed SSH nao funciona nesta shape.
+    ssh_authorized_keys = join("\n", compact([var.ops_ssh_public_key, var.ci_ssh_public_key]))
     user_data = base64encode(templatefile("${path.module}/templates/cloud-init-api.sh.tftpl", {
       region                 = var.region
       secret_id              = oci_vault_secret.app.id

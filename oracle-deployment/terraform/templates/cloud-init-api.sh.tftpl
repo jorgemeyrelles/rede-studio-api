@@ -202,6 +202,29 @@ echo "===== [6/9] TLS via Certbot (Let's Encrypt, desafio webroot) ====="
 # hostname nao foi configurado (duckdns_hostname vazio), a API continua
 # de pe servindo so HTTP -- TLS fica pendente pra proxima tentativa,
 # nunca quebra o deploy da aplicacao em si.
+
+echo "--- Restaurando certificado do Object Storage (se existir um backup) ---"
+# /opt/rede-studio/certbot/etc mora no disco de boot -- some a cada
+# recriacao da VM (terraform apply -replace, inclusive todo deploy via
+# CI/CD). Sem restaurar aqui, "certbot certonly" tenta emitir um
+# certificado NOVO em toda VM nova, e o Let's Encrypt so permite 5
+# emissoes por dominio a cada 168h -- poucas recriacoes seguidas (um
+# dia de debug, ou poucos deploys no mesmo dia) esgotam essa cota e a
+# API fica sem HTTPS ate a janela liberar. Restaurando o estado antigo
+# do certbot (live/archive/renewal), o "certonly" abaixo reconhece que
+# ja tem um certificado valido e nao contata o Let's Encrypt de novo --
+# so emite algo novo se realmente nao houver backup ou ele tiver expirado.
+if oci os object get \
+    --bucket-name "${artifacts_bucket}" --namespace "${namespace}" \
+    --name letsencrypt-backup.tar.gz --file /tmp/letsencrypt-backup.tar.gz \
+    --region "${region}" --auth instance_principal >/dev/null 2>&1; then
+  tar -xzf /tmp/letsencrypt-backup.tar.gz -C /opt/rede-studio/certbot/etc/
+  rm -f /tmp/letsencrypt-backup.tar.gz
+  echo "Certificado anterior restaurado."
+else
+  echo "Nenhum backup encontrado -- primeira emissao para este dominio."
+fi
+
 CERTBOT_OK=0
 if [ -n "${duckdns_hostname}" ]; then
   if docker run --rm \
@@ -288,12 +311,24 @@ NGINXEOF
   # que acabaram de aparecer no host.
   docker restart rede-studio-nginx || true
 
+  echo "--- Backup do certificado no Object Storage ---"
+  # Cobre tanto emissao nova quanto o caso "ja tinha certificado valido,
+  # certbot so confirmou" -- mante o backup sempre atualizado com o que
+  # esta valido agora, pra proxima recriacao de VM restaurar exatamente isso.
+  tar -czf /tmp/letsencrypt-backup.tar.gz -C /opt/rede-studio/certbot/etc .
+  oci os object put --force \
+    --bucket-name "${artifacts_bucket}" --namespace "${namespace}" \
+    --name letsencrypt-backup.tar.gz --file /tmp/letsencrypt-backup.tar.gz \
+    --region "${region}" --auth instance_principal
+  rm -f /tmp/letsencrypt-backup.tar.gz
+
   # Renovacao automatica: roda 2x/dia (padrao recomendado pelo Certbot),
   # so renova de fato quando faltam <30 dias pro certificado expirar, e
-  # so recarrega o nginx se a renovacao realmente aconteceu (--deploy-hook
-  # so dispara em caso de renovacao efetiva, nao em toda checagem).
+  # so recarrega o nginx/atualiza o backup se a renovacao realmente
+  # aconteceu (--deploy-hook so dispara em caso de renovacao efetiva,
+  # nao em toda checagem).
   cat >/etc/cron.d/rede-studio-certbot-renew <<CRONEOF
-0 3,15 * * * root docker run --rm -v /opt/rede-studio/certbot/www:/var/www/certbot -v /opt/rede-studio/certbot/etc:/etc/letsencrypt certbot/certbot renew --webroot -w /var/www/certbot --deploy-hook "docker restart rede-studio-nginx" >> /var/log/rede-studio-certbot-renew.log 2>&1
+0 3,15 * * * root docker run --rm -v /opt/rede-studio/certbot/www:/var/www/certbot -v /opt/rede-studio/certbot/etc:/etc/letsencrypt certbot/certbot renew --webroot -w /var/www/certbot --deploy-hook "docker restart rede-studio-nginx && tar -czf /tmp/letsencrypt-backup.tar.gz -C /opt/rede-studio/certbot/etc . && oci os object put --force --bucket-name ${artifacts_bucket} --namespace ${namespace} --name letsencrypt-backup.tar.gz --file /tmp/letsencrypt-backup.tar.gz --region ${region} --auth instance_principal && rm -f /tmp/letsencrypt-backup.tar.gz" >> /var/log/rede-studio-certbot-renew.log 2>&1
 CRONEOF
   chmod 644 /etc/cron.d/rede-studio-certbot-renew
 fi

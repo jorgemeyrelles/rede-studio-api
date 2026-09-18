@@ -15,4 +15,6 @@ public final class CollectionNames {
     public static final String PROJECTS = "projects";
 
     public static final String NETWORK_STATES = "network_states";
+
+    public static final String EQUIPMENTS = "equipments";
 }

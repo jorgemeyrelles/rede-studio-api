@@ -94,6 +94,38 @@ mp:
           type: direct
           durable: true
         default-routing-key: project.delete
+      equipment-create-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: equipment.create
+          type: direct
+          durable: true
+        default-routing-key: equipment.create
+      equipment-bulk-create-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: equipment.bulk-create
+          type: direct
+          durable: true
+        default-routing-key: equipment.bulk-create
+      equipment-update-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: equipment.update
+          type: direct
+          durable: true
+        default-routing-key: equipment.update
+      equipment-delete-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: equipment.delete
+          type: direct
+          durable: true
+        default-routing-key: equipment.delete
     incoming:
       user-registration-in:
         connector: smallrye-rabbitmq
@@ -145,6 +177,46 @@ mp:
           type: direct
           durable: true
         routing-keys: project.delete
+      equipment-create-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: equipment.create
+          durable: true
+        exchange:
+          name: equipment.create
+          type: direct
+          durable: true
+        routing-keys: equipment.create
+      equipment-bulk-create-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: equipment.bulk-create
+          durable: true
+        exchange:
+          name: equipment.bulk-create
+          type: direct
+          durable: true
+        routing-keys: equipment.bulk-create
+      equipment-update-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: equipment.update
+          durable: true
+        exchange:
+          name: equipment.update
+          type: direct
+          durable: true
+        routing-keys: equipment.update
+      equipment-delete-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: equipment.delete
+          durable: true
+        exchange:
+          name: equipment.delete
+          type: direct
+          durable: true
+        routing-keys: equipment.delete
 
 # Conexão global do conector RabbitMQ (compartilhada por todos os channels)
 rabbitmq-host: ${RABBITMQ_HOST:localhost}

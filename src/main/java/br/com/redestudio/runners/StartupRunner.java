@@ -126,6 +126,21 @@ public class StartupRunner {
 
         projectsCollection.createIndex(Indexes.ascending("owner_id"));
         LOG.infof("[Index] projects.owner_id → OK");
+
+        var equipmentsCollection = mongoClient
+                .getDatabase(databaseName)
+                .getCollection(CollectionNames.EQUIPMENTS);
+
+        equipmentsCollection.createIndex(Indexes.ascending("brand"));
+        LOG.infof("[Index] equipments.brand → OK");
+
+        // Índice de texto (não regex) para busca por parte do nome do modelo
+        // — EquipmentRepository#findByModelContains ainda usa $regex (igual
+        // ao padrão de UserRepository#findByUsernameContains), este índice
+        // só acelera esse tipo de busca por prefixo/substring em coleções
+        // maiores; createIndex é idempotente, seguro em todo boot.
+        equipmentsCollection.createIndex(Indexes.text("model"));
+        LOG.infof("[Index] equipments.model → text OK");
     }
 
     /**

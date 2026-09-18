@@ -1,8 +1,188 @@
 # rede-studio-api
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+API REST (Quarkus, Java 21) para o **Rede Studio** — a ferramenta de desenho e
+documentação de infraestrutura de rede corporativa. Este repositório é o
+backend; o frontend (React/TypeScript) vive em `rede-sp-cwb`.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+## Objetivo
+
+Dar ao Rede Studio (frontend) um backend real de autenticação e persistência
+multi-usuário/multi-projeto: cada usuário autenticado tem N projetos, cada
+projeto guarda o estado completo de uma topologia de rede desenhada no
+Studio (sites, tiers, nós, ACLs, VLANs, rotas, Tech Profiles), salvo e
+recuperado entre sessões e dispositivos — sem isso, o Studio seria só
+`localStorage` local ao navegador, sem login nem multi-dispositivo.
+
+## Descrição da API
+
+- **Autenticação**: registro/login por senha (BCrypt + JWT assinado RSA) e
+  login social (Google/Microsoft — o frontend obtém o ID token do provedor,
+  esta API só verifica a assinatura via JWKS do provedor, nunca fala com o
+  endpoint de token dele).
+- **Gestão de usuários**: perfil self-service (`/api/users/me`) e
+  administração de usuários restrita a `ADMIN`.
+- **Projetos**: CRUD de projetos por usuário (`/api/projects`), cada um
+  guardando um snapshot completo do estado de rede desenhado no Studio.
+- Endpoints de saúde/observabilidade do próprio Quarkus:
+  `/q/health/live`, `/q/health/ready`, `/q/metrics`.
+
+## Arquitetura da API
+
+### Diagrama de camadas
+
+```mermaid
+flowchart LR
+    Client(["Cliente HTTP"]) --> Filter["JwtAuthenticationFilter\n(whitelist de rotas públicas)"]
+    Filter --> Controller["Controller\n(HTTP, @RolesAllowed, OpenAPI)"]
+    Controller --> Service["Service\n(regra de negócio)"]
+    Service --> Component["Component\n(BCrypt, JWT, OAuth JWKS, e-mail)"]
+    Service --> Redis[("Redis\ncache-aside")]
+    Service --> Producer["Producer\n(mensageria)"]
+    Producer -->|AMQP| Queue[("fila dedicada\npor operação")]
+    Queue --> Consumer["Consumer"]
+    Consumer --> Repo["Repository\n(Panache/Mongo)"]
+    Service -->|leitura direta| Repo
+    Controller -.->|exceção de domínio| Handler["GlobalExceptionHandler\n→ ErrorResponse JSON"]
+```
+
+Toda requisição passa pelo `JwtAuthenticationFilter` antes de qualquer
+outra coisa: libera os endpoints públicos (`/api/auth/*`, `/q/health`,
+`/q/metrics`, `/q/openapi`, `/q/swagger-ui`) e exige um `Authorization:
+Bearer` bem-formado pra qualquer outra rota — sem validar o token em si,
+isso fica por conta do SmallRye JWT (`@RolesAllowed`/`@Authenticated`) no
+endpoint. Nenhuma exceção de domínio (`UserAlreadyExistsException`,
+`InvalidCredentialsException`, `NotFoundException`, etc.) escapa como
+stack trace: um único `GlobalExceptionHandler` converte tudo num
+`ErrorResponse` JSON padronizado.
+
+### Pacotes e papel de cada camada
+
+| Pacote | Papel | Exemplos reais no código |
+|---|---|---|
+| `controllers` | Só concerns de HTTP: rota, status code, `@RolesAllowed`, anotações OpenAPI. Nenhuma regra de negócio. | `AuthController`, `UserController`, `MeController`, `ProjectController` |
+| `services` | Toda a regra de negócio; orquestram repositories, components e producers. | `AuthService`, `UserService`, `ProjectService`, `ProjectCacheService`, `IdempotencyService` |
+| `repositories` | Acesso a dado — MongoDB via Panache. | `UserRepository`, `ProjectRepository`, `NetworkStateRepository` |
+| `components` | Integrações pontuais que não são nem service nem repository. | `PasswordHasher` (BCrypt), `JwtTokenBuilder` (RSA), `OAuthTokenVerifier` (JWKS Google/Microsoft), `RegistrationMailer` |
+| `entities` | Documentos do MongoDB (Panache). | `UserEntity`, `ProjectEntity`, `NetworkStateEntity` |
+| `dtos/request`, `dtos/response` | Contrato HTTP de entrada/saída — nunca expõem `entities` direto. | `RegisterRequest`, `LoginRequest`, `SaveSnapshotRequest`, `AuthResponse` |
+| `messaging` | Producers/consumers RabbitMQ — braço assíncrono do padrão de escrita (abaixo). | `UserRegistrationProducer`/`Consumer`, `ProjectMutationProducer`/`Consumer` |
+| `filters` | Autenticação de borda, antes do JAX-RS. | `JwtAuthenticationFilter` |
+| `handlers` | Tradução de exceção → resposta HTTP. | `GlobalExceptionHandler`, `ConstraintViolationExceptionMapper` |
+| `configurations` | Beans de configuração. | `JwtConfiguration`, `OAuthConfiguration`, `CorsConfiguration`, `OpenApiConfiguration`, `AdminConfiguration` |
+| `runners` | Código de startup. | `StartupRunner` (cria o usuário admin na primeira subida, se não existir) |
+
+### Endpoints
+
+| Método | Rota | Acesso | Controller |
+|---|---|---|---|
+| `POST` | `/api/auth/register` | público | `AuthController` |
+| `POST` | `/api/auth/login` | público | `AuthController` |
+| `POST` | `/api/auth/oauth/{provider}` | público | `AuthController` |
+| `GET`/`PATCH` | `/api/users/me` | `USER`, `ADMIN` | `MeController` |
+| `GET` | `/api/users` | `ADMIN` | `UserController` |
+| `POST` | `/api/users/search/{email\|username\|name}` | `ADMIN` | `UserController` |
+| `PATCH` | `/api/users/email/{email}` | `ADMIN` | `UserController` |
+| `PATCH` | `/api/users/email/{email}/password` | `ADMIN` | `UserController` |
+| `DELETE` | `/api/users/email/{email}` | `ADMIN` | `UserController` |
+| `POST`/`GET` | `/api/projects` | `USER`, `ADMIN` | `ProjectController` |
+| `GET`/`PATCH`/`DELETE` | `/api/projects/{id}` | `USER`, `ADMIN` | `ProjectController` |
+| `PUT` | `/api/projects/{id}/snapshot` | `USER`, `ADMIN` | `ProjectController` |
+
+### Modelo de autenticação
+
+Senhas com BCrypt; JWT assinado RSA carregando `sub`/`upn` (email), `uid`
+(o `_id` do Mongo, resolvido via `jwt.getClaim("uid")` — não
+`getSubject()` — pra qualquer relação por dono de entidade) e `groups`
+(roles, usadas direto em `@RolesAllowed`). Login e registro devolvem o
+mesmo erro genérico pra "usuário não existe" e "senha errada", de
+propósito, pra não permitir enumeração de usuários.
+
+### Padrão de escrita/leitura (mensageria)
+
+Toda escrita de entidade de domínio passa por **Redis → fila (RabbitMQ) →
+MongoDB**, nunca um `save()` síncrono direto no Mongo a partir da thread
+da requisição:
+1. O `Service` grava o novo estado no Redis (é isso que torna uma leitura
+   logo depois da escrita consistente) e publica numa fila **dedicada por
+   operação**, via um `Producer` (`UserRegistrationProducer` → fila
+   `user.registration`; `ProjectMutationProducer` → filas
+   `project.create`/`project.rename`/`project.snapshot`/`project.delete`
+   — uma fila por operação, não uma fila compartilhada com
+   discriminador), respondendo ao cliente imediatamente, sem esperar o
+   `Consumer` persistir no Mongo.
+2. O `Consumer` correspondente (`UserRegistrationConsumer`,
+   `ProjectMutationConsumer`) lê da fila e grava de fato no Mongo via o
+   `Repository`.
+3. A leitura consulta o Redis primeiro (cache-aside, TTL ~24h); em caso de
+   miss, cai pro Mongo e repopula o Redis.
+
+## Portas utilizadas
+
+| Porta | Serviço | Onde |
+|---|---|---|
+| `8080` | API Quarkus | Local (direto) e produção (interna, via `systemd`, nunca exposta direto) |
+| `8090` → `80` | nginx (proxy local) | Só local (Docker Compose) |
+| `80`/`443` | nginx (TLS, rate limit) | Produção, atrás do Load Balancer |
+| `27018` → `27017` | MongoDB | Só local (Docker Compose — `27017` costuma estar ocupado pelo Mongo do SO) |
+| `5672` | RabbitMQ (AMQP) | Local e produção (produção: só dentro da VCN) |
+| `15672` | RabbitMQ Management UI | Só local |
+| `6379` | Redis | Local e produção (produção: loopback da VM da API) |
+| `9090` | Prometheus | Só local |
+| `3000` | Grafana | Só local (`admin`/`admin` em dev) |
+
+Em produção, MongoDB é Atlas (fora da rede da OCI) e métricas vão pro
+Grafana Cloud via `vmagent` — nenhuma dessas duas portas locais (Prometheus,
+Grafana próprios) existe lá.
+
+## Rodando localmente
+
+### Pré-requisitos
+
+Chaves JWT (uma vez só, saída em `secrets/`, gitignored):
+
+```bash
+bash generate-jwt-keys.sh
+```
+
+### Opção 1 — dev mode (live reload)
+
+```bash
+./mvnw quarkus:dev
+```
+
+MongoDB sobe sozinho via Quarkus Dev Services (precisa de Docker rodando).
+Redis e RabbitMQ **não** ativam Dev Services aqui (`application.yml` já dá
+um host default explícito pros dois, então o Dev Services não os trata
+como "não configurados") — suba-os à parte:
+
+```bash
+docker run -d --rm -p 6379:6379 redis:7-alpine
+docker run -d --rm -p 5672:5672 rabbitmq:3.13-management-alpine
+```
+
+Dev UI em <http://localhost:8080/q/dev/>.
+
+### Opção 2 — stack completa (Docker Compose)
+
+Sobe API + MongoDB + Redis + RabbitMQ + nginx + Prometheus + Grafana, tudo
+junto:
+
+```bash
+cd docker/dev
+docker compose up --build
+```
+
+Requer `.env.dev` (já no repo) e as chaves de `secrets/` do passo anterior.
+
+### Rodando os testes
+
+```bash
+./mvnw test                                    # suíte completa
+./mvnw test -Dtest=AuthControllerTest          # uma classe
+./mvnw test -Dtest=AuthControllerTest#loginReturnsToken  # um método
+```
+
+Mesmo requisito de Redis/RabbitMQ da Opção 1 acima.
 
 ## Arquitetura Cloud (produção)
 
@@ -44,8 +224,8 @@ flowchart TB
     subgraph OCI["OCI — serviços gerenciados (Always Free)"]
         Vault["OCI Vault\n(secrets: Mongo URI, JWT, admin, RabbitMQ, Grafana)"]
         ObjStorage["Object Storage\n(artefato do build + backup do certificado TLS)"]
-        Monitoring["OCI Monitoring\n(CPU, memória, disco, rede)"]
-        Notifications["Notifications + Alarme\n(backend unhealthy → e-mail)"]
+        Monitoring["OCI Monitoring\n(health check do backend HTTPS)"]
+        Notifications["Notifications\n(assinatura por e-mail)"]
         Bastion["Bastion\n(sessões Port Forwarding)"]
     end
 
@@ -54,13 +234,15 @@ flowchart TB
         Grafana["Grafana Cloud\n(Prometheus + dashboards)"]
     end
 
-    subgraph CI["GitHub Actions (push na master)"]
+    subgraph CI["GitHub Actions (PR + push na master)"]
         Tests["test"]
-        Deploy["deploy\n(build + upload + restart via SSH/Bastion;\nterraform apply só se .tf mudou)"]
+        Deploy["deploy\n(build + upload + restart via SSH;\nterraform apply só se .tf mudou)"]
     end
 
     Internet -->|HTTPS/HTTP :443/:80| LB
     LB -->|TCP passthrough| Nginx
+    LB -.->|health check do backend| Monitoring
+    Monitoring -->|backend unhealthy| Notifications
     Nginx -->|proxy_pass loopback| Quarkus
     Quarkus -->|loopback| Redis
     Quarkus -->|"AMQP :5672\nrede privada da VCN"| RabbitMQ
@@ -68,12 +250,17 @@ flowchart TB
     Quarkus -->|mongodb+srv via internet| Atlas
     VMAgent -->|scrape loopback /q/metrics| Quarkus
     VMAgent -->|remote_write HTTPS| Grafana
-    ObjStorage -.->|deploy: download do JAR no boot| VM_API
-    ObjStorage -.->|backup/restore do certificado TLS| VM_API
-    Monitoring -->|backend set unhealthy| Notifications
+    VM_API -.->|"download do JAR no boot +\nbackup/restore do certificado TLS"| ObjStorage
     Tests --> Deploy
-    Deploy -.->|Bastion Port Forwarding| VM_API
+    Deploy -.->|upload do JAR novo| ObjStorage
+    Deploy -.->|SSH via túnel| Bastion
+    Bastion -.->|port forwarding| VM_API
 ```
+
+O `Deploy` conecta na VM sempre por um túnel de Bastion Port Forwarding — nunca
+SSH direto (porta 22 não é pública). Todas as setas pontilhadas (`-.->`)
+representam quem **inicia** a chamada de rede (ex.: é a VM que busca o JAR no
+Object Storage no boot, não o contrário).
 
 ### CI/CD
 
@@ -99,76 +286,52 @@ certificado).
 | VM `rede-studio-api` | Quarkus (JVM) | A API em si, `systemd`, heap limitado (`-Xmx350m`) |
 | VM `rede-studio-api` | Redis | Idempotência de mensagens e sessão/auth (`IdempotencyService`, `AuthService`) |
 | VM `rede-studio-api` | vmagent | Coleta `/q/metrics` e envia pra Grafana Cloud |
-| VM `rede-studio-rabbitmq` | RabbitMQ | Fila de mensageria (consumer de registro de usuário) |
+| VM `rede-studio-rabbitmq` | RabbitMQ | Fila do padrão de escrita LB → Redis → fila → Mongo (registro de usuário, criar/renomear/excluir/snapshot de projeto — uma fila dedicada por operação) |
 | OCI (gerenciado) | Vault | Todos os secrets da aplicação |
 | OCI (gerenciado) | Object Storage | Artefato do build (`quarkus-app.tar.gz`) + backup do certificado TLS |
-| OCI (gerenciado) | Monitoring + Notifications | Métricas de infraestrutura + alarme de backend unhealthy por e-mail |
-| OCI (gerenciado) | Bastion | Acesso SSH via sessões Port Forwarding (Managed SSH não funciona nesta shape) |
+| OCI (gerenciado) | Monitoring | Health check do backend HTTPS do Load Balancer |
+| OCI (gerenciado) | Notifications | Assinatura por e-mail, dispara quando o Monitoring acima acusa backend unhealthy |
+| OCI (gerenciado) | Bastion | Túnel SSH via sessões Port Forwarding — usado pelo `deploy` da CI e por debug manual (Managed SSH não funciona nesta shape) |
 | MongoDB Atlas | — | Banco de dados (mesmo cluster usado no período AWS) |
 | Grafana Cloud | — | Métricas de aplicação e dashboards de produção |
-| GitHub Actions | — | CI/CD: testes + deploy automático no push na `master` |
+| GitHub Actions | — | CI/CD: `test` em PR e push, `deploy` automático só no push na `master` |
 
 Detalhes de infraestrutura, decisões e problemas reais encontrados no
 caminho (rede, IAM, bugs de imagem Ubuntu, etc.) ficam em
 `oracle-deployment/` e no histórico de planejamento em `.claude/` (não
 versionado — uso local de desenvolvimento).
 
-## Running the application in dev mode
+## Deploy em produção
 
-You can run your application in dev mode that enables live coding using:
+### Fluxo automático (recomendado)
 
-```shell script
-./mvnw quarkus:dev
+1. Abra um PR pra `master` — dispara o job `test`.
+2. Faça o merge — dispara `test` de novo e então `deploy`, que builda o
+   JAR, sobe pro Object Storage e reinicia o serviço via SSH sozinho.
+3. Se o PR também mudou algo em `oracle-deployment/terraform/`, o
+   `deploy` roda `terraform apply` antes de tudo (só nesse caso).
+
+Nenhum passo manual — é só mergear.
+
+### Fluxo manual (fallback local)
+
+Precisa de `~/.oci/config` configurado e uma chave SSH autorizada na VM
+(`ops_ssh_public_key`, ver `oracle-deployment/terraform/variables.tf`):
+
+```bash
+bash oracle-deployment/deploy-oracle.sh
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+Mesma lógica do `deploy` da CI: builda, sobe o JAR e reinicia o serviço via
+SSH — **nunca** recria a VM sozinho.
 
-## Packaging and running the application
+### Mudança de infraestrutura (`.tf`)
 
-The application can be packaged using:
+Fora do fluxo de deploy de código. Rode local, com sua própria credencial
+OCI (mais ampla que a da CI, de propósito):
 
-```shell script
-./mvnw package
+```bash
+cd oracle-deployment/terraform
+terraform plan     # confira o diff antes
+terraform apply
 ```
-
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
-
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
-```
-
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
-
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
-```
-
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
-
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-You can then execute your native executable with: `./target/rede-studio-api-1.0.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Related Guides
-
-- SmallRye Health ([guide](https://quarkus.io/guides/smallrye-health)): Monitor service health
-- SmallRye JWT Build ([guide](https://quarkus.io/guides/security-jwt-build)): Create JSON Web Token with SmallRye JWT Build API
-- Hibernate Validator ([guide](https://quarkus.io/guides/validation)): Bean validation using Hibernate Validator and Jakarta Validation annotations
-- SmallRye JWT ([guide](https://quarkus.io/guides/security-jwt)): Secure your applications with JSON Web Token
-- MongoDB with Panache ([guide](https://quarkus.io/guides/mongodb-panache)): Simplify your persistence code for MongoDB via the active record or the repository pattern
-- REST Jackson ([guide](https://quarkus.io/guides/rest#json-serialisation)): Jackson serialization support for Quarkus REST. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it
-- YAML Configuration ([guide](https://quarkus.io/guides/config-yaml)): Use YAML to configure your Quarkus application
-- Micrometer Registry Prometheus ([guide](https://quarkus.io/guides/micrometer)): Enable Prometheus support for Micrometer

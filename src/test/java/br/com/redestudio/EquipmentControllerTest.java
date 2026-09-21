@@ -128,7 +128,7 @@ class EquipmentControllerTest {
                         {
                             "brand": "%s",
                             "model": "%s",
-                            "function": "router",
+                            "function": ["roteador", "firewall"],
                             "price": {
                                 "approxPriceUsd": 4697.80,
                                 "approxPriceBrl": 24203.67,
@@ -143,7 +143,7 @@ class EquipmentControllerTest {
                 .body("id", notNullValue())
                 .body("brand", equalTo(BRAND))
                 .body("model", equalTo(MODEL_ONE))
-                .body("function", equalTo("router"))
+                .body("function", equalTo(List.of("roteador", "firewall")))
                 .body("price.approxPriceUsd", equalTo(4697.80f))
                 .extract().path("id");
     }
@@ -158,7 +158,7 @@ class EquipmentControllerTest {
                         {
                             "brand": "%s",
                             "model": "should-not-be-created",
-                            "function": "router",
+                            "function": ["roteador", "firewall"],
                             "price": { "approxPriceUsd": 1.0, "approxPriceBrl": 5.0, "scannedAt": "2026-09-16T00:00:00Z" }
                         }
                         """.formatted(BRAND))
@@ -177,7 +177,7 @@ class EquipmentControllerTest {
                         {
                             "brand": "%s",
                             "model": "no-auth-model",
-                            "function": "router",
+                            "function": ["roteador", "firewall"],
                             "price": { "approxPriceUsd": 1.0, "approxPriceBrl": 5.0, "scannedAt": "2026-09-16T00:00:00Z" }
                         }
                         """.formatted(BRAND))
@@ -203,13 +203,13 @@ class EquipmentControllerTest {
                                 {
                                     "brand": "%s",
                                     "model": "%s",
-                                    "function": "switch",
+                                    "function": ["switch"],
                                     "price": { "approxPriceUsd": 194.00, "approxPriceBrl": 999.10, "scannedAt": "2026-09-16T00:00:00Z" }
                                 },
                                 {
                                     "brand": "%s",
                                     "model": "%s",
-                                    "function": "access point",
+                                    "function": ["access point", "roteador"],
                                     "price": { "approxPriceUsd": 149.99, "approxPriceBrl": 772.45, "scannedAt": "2026-09-16T00:00:00Z" }
                                 }
                             ]
@@ -220,6 +220,8 @@ class EquipmentControllerTest {
         .then()
                 .statusCode(201)
                 .body("size()", equalTo(2))
+                .body("[0].function", equalTo(List.of("switch")))
+                .body("[1].function", equalTo(List.of("access point", "roteador")))
                 .extract().path("id");
 
         bulkCreatedId = (String) ids.get(0);
@@ -317,7 +319,7 @@ class EquipmentControllerTest {
                 .contentType(ContentType.JSON)
                 .body("""
                         {
-                            "function": "roteador de borda"
+                            "function": ["  Roteador de Borda ", "roteador de borda", "gateway"]
                         }
                         """)
         .when()
@@ -327,7 +329,22 @@ class EquipmentControllerTest {
                 .body("id", equalTo(createdId))
                 .body("brand", equalTo(BRAND))
                 .body("model", equalTo(MODEL_ONE))
-                .body("function", equalTo("roteador de borda"));
+                .body("function", equalTo(List.of("roteador de borda", "gateway")));
+    }
+
+    @Test
+    @Order(11)
+    void update_emptyFunction_returns400() {
+        given()
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(ContentType.JSON)
+                .body("""
+                        { "function": [] }
+                        """)
+        .when()
+                .patch("/api/equipments/" + createdId)
+        .then()
+                .statusCode(400);
     }
 
     @Test
@@ -337,7 +354,7 @@ class EquipmentControllerTest {
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(ContentType.JSON)
                 .body("""
-                        { "function": "should-not-apply" }
+                        { "function": ["should-not-apply"] }
                         """)
         .when()
                 .patch("/api/equipments/" + createdId)

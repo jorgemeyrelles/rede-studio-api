@@ -1,14 +1,17 @@
 package br.com.redestudio.runners;
 
 import br.com.redestudio.collections.CollectionNames;
+import br.com.redestudio.components.EquipmentFunctions;
 import br.com.redestudio.components.PasswordHasher;
 import br.com.redestudio.configurations.AdminConfiguration;
 import br.com.redestudio.entities.UserEntity;
 import br.com.redestudio.repositories.UserRepository;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.model.CreateCollectionOptions;
+import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.Indexes;
+import com.mongodb.client.model.Updates;
 import com.mongodb.client.model.ValidationAction;
 import com.mongodb.client.model.ValidationLevel;
 import com.mongodb.client.model.ValidationOptions;
@@ -16,6 +19,7 @@ import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
+import org.bson.BsonType;
 import org.bson.Document;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -79,6 +83,7 @@ public class StartupRunner {
         LOG.info(SEPARATOR);
 
         createIndexes();
+        migrateEquipmentFunctionToList();
         ensureNetworkStateSchema();
         ensureAdminUser();
     }
@@ -141,6 +146,29 @@ public class StartupRunner {
         // maiores; createIndex é idempotente, seguro em todo boot.
         equipmentsCollection.createIndex(Indexes.text("model"));
         LOG.infof("[Index] equipments.model → text OK");
+    }
+
+    /**
+     * Converts {@code equipments.function} from the old single string
+     * ("roteador/firewall/gateway") to a list of terms (see
+     * {@link EquipmentFunctions#fromLegacy}). Only touches documents where
+     * the field is still a string, so it's idempotent. Runs before any
+     * request can read the collection — the entity now maps {@code function}
+     * as a list and can't decode the old string form.
+     */
+    private void migrateEquipmentFunctionToList() {
+        var equipments = mongoClient
+                .getDatabase(databaseName)
+                .getCollection(CollectionNames.EQUIPMENTS);
+
+        int migrated = 0;
+        for (Document doc : equipments.find(Filters.type("function", BsonType.STRING))) {
+            equipments.updateOne(
+                    Filters.eq("_id", doc.get("_id")),
+                    Updates.set("function", EquipmentFunctions.fromLegacy(doc.getString("function"))));
+            migrated++;
+        }
+        LOG.infof("[Migration] equipments.function string → list: %d document(s) migrated", migrated);
     }
 
     /**

@@ -1,5 +1,6 @@
 package br.com.redestudio.services;
 
+import br.com.redestudio.components.EquipmentFunctions;
 import br.com.redestudio.dtos.request.BulkCreateEquipmentsRequest;
 import br.com.redestudio.dtos.request.CreateEquipmentRequest;
 import br.com.redestudio.dtos.request.EquipmentPriceRequest;
@@ -107,14 +108,15 @@ public class EquipmentService {
      */
     public EquipmentResponse create(CreateEquipmentRequest request) {
         ObjectId id = new ObjectId();
+        List<String> function = EquipmentFunctions.normalize(request.getFunction());
         EquipmentResponse response = toResponse(id, request.getBrand(), request.getModel(),
-                request.getFunction(), request.getPrice());
+                function, request.getPrice());
 
         cacheService.putOne(response);
         prependToAllCache(response);
 
         producer.publishCreate(new EquipmentCreateMessage(
-                id.toHexString(), request.getBrand(), request.getModel(), request.getFunction(), request.getPrice()));
+                id.toHexString(), request.getBrand(), request.getModel(), function, request.getPrice()));
 
         return response;
     }
@@ -132,11 +134,12 @@ public class EquipmentService {
 
         for (CreateEquipmentRequest item : request.getItems()) {
             ObjectId id = new ObjectId();
+            List<String> function = EquipmentFunctions.normalize(item.getFunction());
             EquipmentResponse response = toResponse(id, item.getBrand(), item.getModel(),
-                    item.getFunction(), item.getPrice());
+                    function, item.getPrice());
             responses.add(response);
             messages.add(new EquipmentCreateMessage(
-                    id.toHexString(), item.getBrand(), item.getModel(), item.getFunction(), item.getPrice()));
+                    id.toHexString(), item.getBrand(), item.getModel(), function, item.getPrice()));
         }
 
         responses.forEach(cacheService::putOne);
@@ -161,7 +164,9 @@ public class EquipmentService {
 
         String brand = request.getBrand() != null ? request.getBrand() : current.getBrand();
         String model = request.getModel() != null ? request.getModel() : current.getModel();
-        String function = request.getFunction() != null ? request.getFunction() : current.getFunction();
+        List<String> function = request.getFunction() != null
+                ? EquipmentFunctions.normalize(request.getFunction())
+                : current.getFunction();
         EquipmentPriceRequest price = request.getPrice() != null
                 ? request.getPrice()
                 : new EquipmentPriceRequest(
@@ -236,7 +241,7 @@ public class EquipmentService {
     }
 
     private static EquipmentResponse toResponse(
-            ObjectId id, String brand, String model, String function, EquipmentPriceRequest price) {
+            ObjectId id, String brand, String model, List<String> function, EquipmentPriceRequest price) {
         Instant now = Instant.now();
         return new EquipmentResponse(
                 id.toHexString(), brand, model, function,

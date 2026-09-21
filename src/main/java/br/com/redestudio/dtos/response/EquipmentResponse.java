@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * Full equipment catalog entry representation.
@@ -26,8 +27,8 @@ public class EquipmentResponse {
     @Schema(description = "Equipment model name/code", example = "Catalyst 9120AXE")
     private String model;
 
-    @Schema(description = "Equipment category/function", example = "access point")
-    private String function;
+    @Schema(description = "Functions the equipment serves", example = "[\"roteador\", \"firewall\", \"gateway\"]")
+    private List<String> function;
 
     @Schema(description = "Approximate price (USD + BRL)")
     private EquipmentPriceResponse price;

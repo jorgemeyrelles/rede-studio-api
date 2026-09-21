@@ -1,10 +1,14 @@
 package br.com.redestudio.dtos.request;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
+
+import java.util.List;
 
 /**
  * Request body for partially updating an equipment catalog entry — all
@@ -23,8 +27,9 @@ public class UpdateEquipmentRequest {
     @Schema(description = "New model name/code, if changing", example = "Catalyst 9130AXI")
     private String model;
 
-    @Schema(description = "New function/category, if changing", example = "access point")
-    private String function;
+    @Size(min = 1, message = "Function must not be empty")
+    @Schema(description = "New functions, if changing (replaces the whole list)", example = "[\"access point\"]")
+    private List<@NotBlank(message = "Function entries must not be blank") String> function;
 
     @Valid
     @Schema(description = "New price, if changing")

@@ -9,6 +9,7 @@ import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.bson.types.ObjectId;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * MongoDB document representing a piece of network equipment available for
@@ -34,9 +35,9 @@ public class EquipmentEntity {
     @BsonProperty("model")
     private String model;
 
-    /** Category/function of the equipment (e.g. "roteador", "switch", "firewall", "access point"). */
+    /** Functions the equipment serves (e.g. ["roteador", "firewall", "gateway"], ["switch"], ["access point"]). */
     @BsonProperty("function")
-    private String function;
+    private List<String> function;
 
     @BsonProperty("price")
     private EquipmentPrice price;
@@ -51,7 +52,7 @@ public class EquipmentEntity {
      * Factory method for new equipment creation.
      * Sets timestamps to now.
      */
-    public static EquipmentEntity create(String brand, String model, String function, EquipmentPrice price) {
+    public static EquipmentEntity create(String brand, String model, List<String> function, EquipmentPrice price) {
         EquipmentEntity equipment = new EquipmentEntity();
         equipment.setBrand(brand);
         equipment.setModel(model);

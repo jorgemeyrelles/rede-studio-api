@@ -2,11 +2,14 @@ package br.com.redestudio.dtos.request;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
+
+import java.util.List;
 
 /**
  * Request body for registering a single piece of equipment in the catalog.
@@ -25,9 +28,9 @@ public class CreateEquipmentRequest {
     @Schema(description = "Equipment model name/code", example = "Catalyst 9120AXE", required = true)
     private String model;
 
-    @NotBlank(message = "Function is required")
-    @Schema(description = "Equipment category/function", example = "access point", required = true)
-    private String function;
+    @NotEmpty(message = "Function is required")
+    @Schema(description = "Functions the equipment serves", example = "[\"roteador\", \"firewall\", \"gateway\"]", required = true)
+    private List<@NotBlank(message = "Function entries must not be blank") String> function;
 
     @NotNull(message = "price is required")
     @Valid

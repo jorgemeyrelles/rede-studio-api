@@ -2,6 +2,8 @@ package br.com.redestudio.messaging;
 
 import br.com.redestudio.dtos.request.EquipmentPriceRequest;
 
+import java.util.List;
+
 /**
  * Payload published to the {@code equipment.update} RabbitMQ queue.
  *
@@ -15,6 +17,6 @@ public record EquipmentUpdateMessage(
         String equipmentId,
         String brand,
         String model,
-        String function,
+        List<String> function,
         EquipmentPriceRequest price) {
 }

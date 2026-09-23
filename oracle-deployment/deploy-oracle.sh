@@ -70,16 +70,36 @@ SESSION_ID=$(oci bastion session list --bastion-id "$BASTION_ID" --region "$REGI
   --query "data[?\"display-name\"=='$SESSION_NAME'] | [0].id" --raw-output)
 
 LOCAL_PORT=$((20000 + RANDOM % 10000))
-ssh -i "$SSH_KEY" -N -L "${LOCAL_PORT}:${PRIVATE_IP}:22" -p 22 \
+TUNNEL_LOG="$(mktemp /tmp/bastion-tunnel-XXXXXX.log)"
+# IdentitiesOnly=yes -- sem isso, o ssh tambem oferece ao bastion qualquer
+# chave carregada num ssh-agent do ambiente que rodar este script (ex.: um
+# agente de desktop com chaves pessoais). O bastion so autoriza a chave
+# registrada nesta sessao especifica e derruba a conexao apos poucas
+# tentativas erradas -- as chaves alheias esgotavam essa cota antes da
+# certa ser sequer oferecida, causando "Permission denied (publickey)"
+# mesmo com a chave certa disponivel (ver incidente 2026-09-22).
+ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -N -L "${LOCAL_PORT}:${PRIVATE_IP}:22" -p 22 \
   -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
-  "${SESSION_ID}@host.bastion.${REGION}.oci.oraclecloud.com" &
+  "${SESSION_ID}@host.bastion.${REGION}.oci.oraclecloud.com" >"$TUNNEL_LOG" 2>&1 &
 TUNNEL_PID=$!
 cleanup() {
   kill "$TUNNEL_PID" 2>/dev/null || true
   wait "$TUNNEL_PID" 2>/dev/null || true
   oci bastion session delete --session-id "$SESSION_ID" --region "$REGION" --auth api_key --force >/dev/null 2>&1 || true
+  rm -f "$TUNNEL_LOG"
 }
 trap cleanup EXIT
+
+# O ssh do tunel roda em background -- sem checar se ele de fato subiu, uma
+# falha imediata dele (ex.: a de publickey acima) passava despercebida e o
+# script gastava os 5min do loop abaixo tentando falar com uma porta local
+# sem nada escutando, so reportando o erro generico "nao respondeu".
+sleep 2
+if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+  echo "ERRO: tunel SSH do bastion encerrou antes de estabelecer conexao." >&2
+  cat "$TUNNEL_LOG" >&2
+  exit 1
+fi
 
 echo "=== 5/5 Reiniciando o servico via SSH ==="
 # A VM pode estar recem-recriada por uma mudanca de infra aplicada logo
@@ -87,7 +107,12 @@ echo "=== 5/5 Reiniciando o servico via SSH ==="
 # assumir que ja esta pronto (cloud-init leva alguns minutos).
 SSH_READY=0
 for i in $(seq 1 30); do
-  if ssh -i "$SSH_KEY" -p "$LOCAL_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+    echo "ERRO: tunel SSH do bastion encerrou durante a espera." >&2
+    cat "$TUNNEL_LOG" >&2
+    exit 1
+  fi
+  if ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -p "$LOCAL_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
       -o ConnectTimeout=8 -o BatchMode=yes ubuntu@127.0.0.1 true 2>/dev/null; then
     SSH_READY=1
     break
@@ -99,7 +124,7 @@ if [ "$SSH_READY" != "1" ]; then
   exit 1
 fi
 
-ssh -i "$SSH_KEY" -p "$LOCAL_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
+ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -p "$LOCAL_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
   ubuntu@127.0.0.1 "sudo REGION='$REGION' BUCKET='$BUCKET' bash -s" <<'REMOTE'
 set -euo pipefail
 NAMESPACE=$(oci os ns get --region "$REGION" --auth instance_principal --raw-output --query data)

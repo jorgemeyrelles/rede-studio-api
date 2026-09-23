@@ -55,7 +55,18 @@ PRIVATE_IP=$(oci compute instance list-vnics --instance-id "$INSTANCE_ID" --regi
   --query 'data[0]."private-ip"' --raw-output)
 
 SESSION_NAME="deploy-$(date +%Y%m%d-%H%M%S)"
-oci bastion session create-port-forwarding \
+# O id vem direto da resposta deste comando (--query/--raw-output extraem
+# so "data.id") -- antes o script relistava todas as sessoes do bastion
+# depois de cria-la e filtrava por display-name, o que e fragil: sem
+# --all, "oci bastion session list" so devolve a primeira pagina, e com
+# varias sessoes recentes acumuladas (TTL de 30min, e tentativas de deploy
+# repetidas na depuracao deste script) a sessao recem-criada podia nem
+# estar nela -- levando a conectar com o id de uma sessao antiga, cuja
+# chave publica registrada nao e a nossa (explica um "Permission denied
+# (publickey)" mesmo com IdentitiesOnly=yes correto, ver incidente
+# 2026-09-23). Ler o id na propria resposta da criacao elimina essa classe
+# de erro por completo -- nunca ha ambiguidade sobre qual sessao usar.
+SESSION_ID=$(oci bastion session create-port-forwarding \
   --bastion-id "$BASTION_ID" \
   --target-resource-id "$INSTANCE_ID" \
   --target-port 22 \
@@ -64,13 +75,26 @@ oci bastion session create-port-forwarding \
   --session-ttl 1800 \
   --ssh-public-key-file "${SSH_KEY}.pub" \
   --region "$REGION" --auth api_key \
-  --wait-for-state SUCCEEDED >/dev/null
-
-SESSION_ID=$(oci bastion session list --bastion-id "$BASTION_ID" --region "$REGION" --auth api_key \
-  --query "data[?\"display-name\"=='$SESSION_NAME'] | [0].id" --raw-output)
+  --wait-for-state SUCCEEDED \
+  --query 'data.id' --raw-output)
 
 LOCAL_PORT=$((20000 + RANDOM % 10000))
 TUNNEL_LOG="$(mktemp /tmp/bastion-tunnel-XXXXXX.log)"
+TUNNEL_PID=""
+cleanup() {
+  # "if" (nao "[ ... ] &&") de proposito: sob "set -e", um "&&" cujo lado
+  # esquerdo falha (TUNNEL_PID ainda vazio) aborta a funcao no meio e pula
+  # a exclusao da sessao do bastion abaixo -- "if" e um contexto protegido,
+  # nao aciona o -e.
+  if [ -n "$TUNNEL_PID" ]; then
+    kill "$TUNNEL_PID" 2>/dev/null || true
+    wait "$TUNNEL_PID" 2>/dev/null || true
+  fi
+  oci bastion session delete --session-id "$SESSION_ID" --region "$REGION" --auth api_key --force >/dev/null 2>&1 || true
+  rm -f "$TUNNEL_LOG"
+}
+trap cleanup EXIT
+
 # IdentitiesOnly=yes -- sem isso, o ssh tambem oferece ao bastion qualquer
 # chave carregada num ssh-agent do ambiente que rodar este script (ex.: um
 # agente de desktop com chaves pessoais). O bastion so autoriza a chave
@@ -78,25 +102,29 @@ TUNNEL_LOG="$(mktemp /tmp/bastion-tunnel-XXXXXX.log)"
 # tentativas erradas -- as chaves alheias esgotavam essa cota antes da
 # certa ser sequer oferecida, causando "Permission denied (publickey)"
 # mesmo com a chave certa disponivel (ver incidente 2026-09-22).
-ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -N -L "${LOCAL_PORT}:${PRIVATE_IP}:22" -p 22 \
-  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
-  "${SESSION_ID}@host.bastion.${REGION}.oci.oraclecloud.com" >"$TUNNEL_LOG" 2>&1 &
-TUNNEL_PID=$!
-cleanup() {
-  kill "$TUNNEL_PID" 2>/dev/null || true
+#
+# Ate 3 tentativas para abrir o tunel: a OCI as vezes reporta a sessao
+# como SUCCEEDED antes do proxy do bastion propagar de fato a chave
+# registrada (corrida de propagacao do lado da OCI) -- uma unica tentativa
+# tratava esse atraso passageiro como falha definitiva.
+TUNNEL_UP=0
+for attempt in 1 2 3; do
+  : >"$TUNNEL_LOG"
+  ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -N -L "${LOCAL_PORT}:${PRIVATE_IP}:22" -p 22 \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
+    "${SESSION_ID}@host.bastion.${REGION}.oci.oraclecloud.com" >"$TUNNEL_LOG" 2>&1 &
+  TUNNEL_PID=$!
+  sleep 3
+  if kill -0 "$TUNNEL_PID" 2>/dev/null; then
+    TUNNEL_UP=1
+    break
+  fi
   wait "$TUNNEL_PID" 2>/dev/null || true
-  oci bastion session delete --session-id "$SESSION_ID" --region "$REGION" --auth api_key --force >/dev/null 2>&1 || true
-  rm -f "$TUNNEL_LOG"
-}
-trap cleanup EXIT
-
-# O ssh do tunel roda em background -- sem checar se ele de fato subiu, uma
-# falha imediata dele (ex.: a de publickey acima) passava despercebida e o
-# script gastava os 5min do loop abaixo tentando falar com uma porta local
-# sem nada escutando, so reportando o erro generico "nao respondeu".
-sleep 2
-if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
-  echo "ERRO: tunel SSH do bastion encerrou antes de estabelecer conexao." >&2
+  echo "Tentativa ${attempt}/3 de abrir o tunel do bastion falhou, tentando de novo em 5s..." >&2
+  sleep 5
+done
+if [ "$TUNNEL_UP" != "1" ]; then
+  echo "ERRO: tunel SSH do bastion nao estabeleceu conexao apos 3 tentativas." >&2
   cat "$TUNNEL_LOG" >&2
   exit 1
 fi

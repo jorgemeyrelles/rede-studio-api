@@ -55,18 +55,15 @@ PRIVATE_IP=$(oci compute instance list-vnics --instance-id "$INSTANCE_ID" --regi
   --query 'data[0]."private-ip"' --raw-output)
 
 SESSION_NAME="deploy-$(date +%Y%m%d-%H%M%S)"
-# O id vem direto da resposta deste comando (--query/--raw-output extraem
-# so "data.id") -- antes o script relistava todas as sessoes do bastion
-# depois de cria-la e filtrava por display-name, o que e fragil: sem
-# --all, "oci bastion session list" so devolve a primeira pagina, e com
-# varias sessoes recentes acumuladas (TTL de 30min, e tentativas de deploy
-# repetidas na depuracao deste script) a sessao recem-criada podia nem
-# estar nela -- levando a conectar com o id de uma sessao antiga, cuja
-# chave publica registrada nao e a nossa (explica um "Permission denied
-# (publickey)" mesmo com IdentitiesOnly=yes correto, ver incidente
-# 2026-09-23). Ler o id na propria resposta da criacao elimina essa classe
-# de erro por completo -- nunca ha ambiguidade sobre qual sessao usar.
-SESSION_ID=$(oci bastion session create-port-forwarding \
+# NAO usar "--query 'data.id'" na resposta deste comando: com
+# --wait-for-state, o proprio --help confirma que o CLI espera o WORK
+# REQUEST atingir aquele estado ("...wait until the work request reaches a
+# certain state") -- e o "data" final impresso e o work request, nao a
+# sessao criada. Ja tentamos isso (2026-09-23): o id extraido era um
+# "ocid1.bastionworkrequest...", nao um "ocid1.bastionsession...", e o ssh
+# subsequente tentava autenticar como uma sessao que nao existe. Resolver
+# o id da sessao de verdade exige relistar e filtrar por display-name.
+oci bastion session create-port-forwarding \
   --bastion-id "$BASTION_ID" \
   --target-resource-id "$INSTANCE_ID" \
   --target-port 22 \
@@ -75,8 +72,10 @@ SESSION_ID=$(oci bastion session create-port-forwarding \
   --session-ttl 1800 \
   --ssh-public-key-file "${SSH_KEY}.pub" \
   --region "$REGION" --auth api_key \
-  --wait-for-state SUCCEEDED \
-  --query 'data.id' --raw-output)
+  --wait-for-state SUCCEEDED >/dev/null
+
+SESSION_ID=$(oci bastion session list --bastion-id "$BASTION_ID" --region "$REGION" --auth api_key \
+  --query "data[?\"display-name\"=='$SESSION_NAME'] | [0].id" --raw-output)
 
 LOCAL_PORT=$((20000 + RANDOM % 10000))
 TUNNEL_LOG="$(mktemp /tmp/bastion-tunnel-XXXXXX.log)"
@@ -107,10 +106,17 @@ trap cleanup EXIT
 # como SUCCEEDED antes do proxy do bastion propagar de fato a chave
 # registrada (corrida de propagacao do lado da OCI) -- uma unica tentativa
 # tratava esse atraso passageiro como falha definitiva.
+#
+# -vvv: a causa do "Permission denied (publickey)" que motivou as mudancas
+# acima (2026-09-22/23) ainda nao foi confirmada -- so temos o erro final
+# do servidor, sem saber quais identidades o cliente ofereceu nem em que
+# ponto o handshake foi rejeitado. Verbose aqui, sem custo (so aumenta o
+# que "$TUNNEL_LOG" guarda), da esse detalhe na proxima falha em vez de
+# mais uma hipotese as cegas.
 TUNNEL_UP=0
 for attempt in 1 2 3; do
   : >"$TUNNEL_LOG"
-  ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -N -L "${LOCAL_PORT}:${PRIVATE_IP}:22" -p 22 \
+  ssh -vvv -i "$SSH_KEY" -o IdentitiesOnly=yes -N -L "${LOCAL_PORT}:${PRIVATE_IP}:22" -p 22 \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
     "${SESSION_ID}@host.bastion.${REGION}.oci.oraclecloud.com" >"$TUNNEL_LOG" 2>&1 &
   TUNNEL_PID=$!

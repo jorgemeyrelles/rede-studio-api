@@ -113,6 +113,7 @@ public class ProjectService {
                 projectId.toHexString(),
                 request.getName(),
                 ownerId.toHexString(),
+                request.getNetworkType(),
                 now,
                 now,
                 request.getNetworkState());
@@ -125,6 +126,7 @@ public class ProjectService {
                 networkStateId.toHexString(),
                 ownerId.toHexString(),
                 request.getName(),
+                request.getNetworkType(),
                 request.getNetworkState()));
 
         return response;
@@ -142,7 +144,7 @@ public class ProjectService {
     public ProjectSummaryResponse rename(String id, ObjectId ownerId, String name) {
         ProjectResponse current = getOwned(id, ownerId);
         ProjectResponse updated = new ProjectResponse(
-                current.getId(), name, current.getOwnerId(),
+                current.getId(), name, current.getOwnerId(), current.getNetworkType(),
                 current.getCreatedAt(), Instant.now(), current.getNetworkState());
 
         cacheService.putProject(updated);
@@ -164,7 +166,7 @@ public class ProjectService {
     public ProjectSummaryResponse saveSnapshot(String id, ObjectId ownerId, NetworkStatePayload networkState) {
         ProjectResponse current = getOwned(id, ownerId);
         ProjectResponse updated = new ProjectResponse(
-                current.getId(), current.getName(), current.getOwnerId(),
+                current.getId(), current.getName(), current.getOwnerId(), current.getNetworkType(),
                 current.getCreatedAt(), Instant.now(), networkState);
 
         cacheService.putProject(updated);

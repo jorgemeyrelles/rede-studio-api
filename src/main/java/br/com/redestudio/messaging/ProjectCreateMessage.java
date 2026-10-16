@@ -1,6 +1,7 @@
 package br.com.redestudio.messaging;
 
 import br.com.redestudio.dtos.NetworkStatePayload;
+import br.com.redestudio.entities.NetworkType;
 
 /**
  * Payload published to the {@code project.create} RabbitMQ queue.
@@ -15,5 +16,6 @@ public record ProjectCreateMessage(
         String networkStateId,
         String ownerId,
         String name,
+        NetworkType networkType,
         NetworkStatePayload networkState) {
 }

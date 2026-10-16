@@ -1,6 +1,7 @@
 package br.com.redestudio.messaging;
 
 import br.com.redestudio.entities.NetworkStateEntity;
+import br.com.redestudio.entities.NetworkType;
 import br.com.redestudio.entities.ProjectEntity;
 import br.com.redestudio.repositories.NetworkStateRepository;
 import br.com.redestudio.repositories.ProjectRepository;
@@ -43,7 +44,7 @@ public class ProjectMutationConsumer {
         networkStateRepository.persist(networkState);
 
         ProjectEntity project = ProjectEntity.create(
-                new ObjectId(message.ownerId()), message.name(), networkState.getId());
+                new ObjectId(message.ownerId()), message.name(), message.networkType(), networkState.getId());
         project.setId(new ObjectId(message.projectId()));
         projectRepository.persist(project);
     }
@@ -58,6 +59,7 @@ public class ProjectMutationConsumer {
             return;
         }
         project.setName(message.name());
+        backfillNetworkTypeIfMissing(project);
         project.setUpdatedAt(Instant.now());
         projectRepository.update(project);
     }
@@ -87,8 +89,22 @@ public class ProjectMutationConsumer {
             networkStateRepository.update(networkState);
         }
 
+        backfillNetworkTypeIfMissing(project);
         project.setUpdatedAt(Instant.now());
         projectRepository.update(project);
+    }
+
+    /**
+     * Sprint tiers — projeto anterior a esta sprint não tem {@code networkType}
+     * no Mongo; em vez de uma migração em lote, qualquer `rename`/`snapshot`
+     * que toque o documento já persiste o default {@link NetworkType#ON_PREMISE}
+     * dali em diante (mesma regra de leitura usada em {@code ProjectResponse}/
+     * {@code ProjectSummaryResponse}).
+     */
+    private void backfillNetworkTypeIfMissing(ProjectEntity project) {
+        if (project.getNetworkType() == null) {
+            project.setNetworkType(NetworkType.ON_PREMISE);
+        }
     }
 
     @Incoming("project-delete-in")

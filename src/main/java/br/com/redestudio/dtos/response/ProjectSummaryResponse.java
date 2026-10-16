@@ -1,5 +1,6 @@
 package br.com.redestudio.dtos.response;
 
+import br.com.redestudio.entities.NetworkType;
 import br.com.redestudio.entities.ProjectEntity;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -29,6 +30,9 @@ public class ProjectSummaryResponse {
     @Schema(description = "Owner's Mongo _id (hex string)", example = "663f0a1b2c3d4e5f6a7b8c9d")
     private String ownerId;
 
+    @Schema(description = "Network topology category, immutable after creation")
+    private NetworkType networkType;
+
     @Schema(description = "Project creation timestamp (UTC)")
     private Instant createdAt;
 
@@ -46,6 +50,9 @@ public class ProjectSummaryResponse {
                 entity.getId().toHexString(),
                 entity.getName(),
                 entity.getOwnerId().toHexString(),
+                // Projeto anterior a esta sprint não tem o campo — trata como
+                // ON_PREMISE na leitura (mesma regra de ProjectResponse.from).
+                entity.getNetworkType() != null ? entity.getNetworkType() : NetworkType.ON_PREMISE,
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }

@@ -39,6 +39,13 @@ public class ProjectEntity {
     @BsonProperty("name")
     private String name;
 
+    /**
+     * Chosen once at creation, never edited afterward. {@code null} on
+     * projects created before this field existed — see {@link NetworkType}.
+     */
+    @BsonProperty("network_type")
+    private NetworkType networkType;
+
     @BsonProperty("created_at")
     private Instant createdAt;
 
@@ -49,10 +56,11 @@ public class ProjectEntity {
      * Factory method for new project creation.
      * Sets timestamps to now.
      */
-    public static ProjectEntity create(ObjectId ownerId, String name, ObjectId networkStateId) {
+    public static ProjectEntity create(ObjectId ownerId, String name, NetworkType networkType, ObjectId networkStateId) {
         ProjectEntity project = new ProjectEntity();
         project.setOwnerId(ownerId);
         project.setName(name);
+        project.setNetworkType(networkType);
         project.setNetworkStateId(networkStateId);
         project.setCreatedAt(Instant.now());
         project.setUpdatedAt(Instant.now());

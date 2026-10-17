@@ -83,7 +83,14 @@ public class StartupRunner {
         LOG.info(SEPARATOR);
 
         createIndexes();
-        migrateEquipmentFunctionToList();
+        // DESATIVADO (2026-10-16): os equipamentos de produção já foram
+        // migrados (function string → lista) no boot de 2026-09-23, então
+        // rodar isso a cada boot só gasta uma consulta — e, antes do ajuste
+        // de filtro abaixo, derrubava a API em loop (ver Javadoc do método).
+        // REATIVAR na próxima atualização de equipamentos e/ou preços que
+        // precisar de migração de dados no startup (ou reaproveitar este
+        // método como modelo para a nova migração).
+        // migrateEquipmentFunctionToList();
         ensureNetworkStateSchema();
         ensureAdminUser();
     }
@@ -155,17 +162,34 @@ public class StartupRunner {
      * the field is still a string, so it's idempotent. Runs before any
      * request can read the collection — the entity now maps {@code function}
      * as a list and can't decode the old string form.
+     *
+     * <p>Armadilha do MongoDB: {@code {function: {$type: "string"}}} também
+     * casa ARRAYS que contêm alguma string — ou seja, os documentos já
+     * migrados ({@code ["roteador", "firewall"]}). Só filtrar por STRING
+     * fazia o segundo boot em diante cair em {@code ClassCastException}
+     * ({@code doc.getString} recebendo um {@code ArrayList}) e a API ficava
+     * em loop de restart (incidente 2026-10-16). Por isso o filtro exclui
+     * arrays explicitamente e o loop ainda confere o tipo real do campo.
+     *
+     * <p>Atualmente desativado em {@link #onStart} — ver comentário lá.
      */
     private void migrateEquipmentFunctionToList() {
         var equipments = mongoClient
                 .getDatabase(databaseName)
                 .getCollection(CollectionNames.EQUIPMENTS);
 
+        var legacyFilter = Filters.and(
+                Filters.type("function", BsonType.STRING),
+                Filters.not(Filters.type("function", BsonType.ARRAY)));
+
         int migrated = 0;
-        for (Document doc : equipments.find(Filters.type("function", BsonType.STRING))) {
+        for (Document doc : equipments.find(legacyFilter)) {
+            if (!(doc.get("function") instanceof String legacy)) {
+                continue;
+            }
             equipments.updateOne(
                     Filters.eq("_id", doc.get("_id")),
-                    Updates.set("function", EquipmentFunctions.fromLegacy(doc.getString("function"))));
+                    Updates.set("function", EquipmentFunctions.fromLegacy(legacy)));
             migrated++;
         }
         LOG.infof("[Migration] equipments.function string → list: %d document(s) migrated", migrated);

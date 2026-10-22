@@ -73,3 +73,6 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+
+# Cópias temporárias do tf-validate (apagadas ao fim de cada execução)
+.claude/tools/.tf-validate.*

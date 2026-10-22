@@ -1,17 +1,16 @@
 package br.com.redestudio.runners;
 
 import br.com.redestudio.collections.CollectionNames;
-import br.com.redestudio.components.EquipmentFunctions;
 import br.com.redestudio.components.PasswordHasher;
 import br.com.redestudio.configurations.AdminConfiguration;
 import br.com.redestudio.entities.UserEntity;
+import br.com.redestudio.repositories.CloudIamTemplateRepository;
+import br.com.redestudio.repositories.CloudPriceRepository;
 import br.com.redestudio.repositories.UserRepository;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.model.CreateCollectionOptions;
-import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.Indexes;
-import com.mongodb.client.model.Updates;
 import com.mongodb.client.model.ValidationAction;
 import com.mongodb.client.model.ValidationLevel;
 import com.mongodb.client.model.ValidationOptions;
@@ -19,7 +18,6 @@ import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-import org.bson.BsonType;
 import org.bson.Document;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -61,6 +59,12 @@ public class StartupRunner {
     @Inject
     AdminConfiguration adminConfiguration;
 
+    @Inject
+    CloudPriceRepository cloudPriceRepository;
+
+    @Inject
+    CloudIamTemplateRepository cloudIamTemplateRepository;
+
     @ConfigProperty(name = "quarkus.mongodb.database", defaultValue = "rede_studio_dev")
     String databaseName;
 
@@ -83,15 +87,13 @@ public class StartupRunner {
         LOG.info(SEPARATOR);
 
         createIndexes();
-        // DESATIVADO (2026-10-16): os equipamentos de produção já foram
-        // migrados (function string → lista) no boot de 2026-09-23, então
-        // rodar isso a cada boot só gasta uma consulta — e, antes do ajuste
-        // de filtro abaixo, derrubava a API em loop (ver Javadoc do método).
-        // REATIVAR na próxima atualização de equipamentos e/ou preços que
-        // precisar de migração de dados no startup (ou reaproveitar este
-        // método como modelo para a nova migração).
-        // migrateEquipmentFunctionToList();
+        // Migrations e seeds de dados: só no ambiente local (DevSeedRunner).
         ensureNetworkStateSchema();
+        ensureCloudStateSchema();
+        cloudPriceRepository.ensureIndexes();
+        cloudIamTemplateRepository.ensureIndexes();
+        LOG.infof("[Index] %s.cloud_prices → (provider, rate_code) unique, (provider, region, resource_type) OK",
+                cloudPriceRepository.databaseName());
         ensureAdminUser();
     }
 
@@ -156,46 +158,6 @@ public class StartupRunner {
     }
 
     /**
-     * Converts {@code equipments.function} from the old single string
-     * ("roteador/firewall/gateway") to a list of terms (see
-     * {@link EquipmentFunctions#fromLegacy}). Only touches documents where
-     * the field is still a string, so it's idempotent. Runs before any
-     * request can read the collection — the entity now maps {@code function}
-     * as a list and can't decode the old string form.
-     *
-     * <p>Armadilha do MongoDB: {@code {function: {$type: "string"}}} também
-     * casa ARRAYS que contêm alguma string — ou seja, os documentos já
-     * migrados ({@code ["roteador", "firewall"]}). Só filtrar por STRING
-     * fazia o segundo boot em diante cair em {@code ClassCastException}
-     * ({@code doc.getString} recebendo um {@code ArrayList}) e a API ficava
-     * em loop de restart (incidente 2026-10-16). Por isso o filtro exclui
-     * arrays explicitamente e o loop ainda confere o tipo real do campo.
-     *
-     * <p>Atualmente desativado em {@link #onStart} — ver comentário lá.
-     */
-    private void migrateEquipmentFunctionToList() {
-        var equipments = mongoClient
-                .getDatabase(databaseName)
-                .getCollection(CollectionNames.EQUIPMENTS);
-
-        var legacyFilter = Filters.and(
-                Filters.type("function", BsonType.STRING),
-                Filters.not(Filters.type("function", BsonType.ARRAY)));
-
-        int migrated = 0;
-        for (Document doc : equipments.find(legacyFilter)) {
-            if (!(doc.get("function") instanceof String legacy)) {
-                continue;
-            }
-            equipments.updateOne(
-                    Filters.eq("_id", doc.get("_id")),
-                    Updates.set("function", EquipmentFunctions.fromLegacy(legacy)));
-            migrated++;
-        }
-        LOG.infof("[Migration] equipments.function string → list: %d document(s) migrated", migrated);
-    }
-
-    /**
      * Array field names required at the top level of every
      * {@code network_states} document — mirrors the frontend's
      * {@code NetworkState} shape (see {@code NetworkStatePayload}).
@@ -223,8 +185,6 @@ public class StartupRunner {
      * exists — both are idempotent, safe to run on every startup.
      */
     private void ensureNetworkStateSchema() {
-        var database = mongoClient.getDatabase(databaseName);
-
         var properties = new Document();
         NETWORK_STATE_ARRAY_FIELDS.forEach(field -> properties.append(field, new Document("bsonType", "array")));
         NETWORK_STATE_OBJECT_FIELDS.forEach(field -> properties.append(field, new Document("bsonType", "object")));
@@ -233,6 +193,35 @@ public class StartupRunner {
         required.addAll(NETWORK_STATE_ARRAY_FIELDS);
         required.addAll(NETWORK_STATE_OBJECT_FIELDS);
 
+        ensureTopLevelSchema(CollectionNames.NETWORK_STATES, properties, required);
+    }
+
+    /**
+     * Same database-layer guarantee as {@link #ensureNetworkStateSchema()},
+     * for the architecture drafts of {@code CLOUD} projects — mirrors
+     * {@code CloudStatePayload} (inner content of each item stays opaque).
+     */
+    private void ensureCloudStateSchema() {
+        var properties = new Document()
+                .append("schema_version", new Document("bsonType", "int"))
+                .append("provider", new Document("bsonType", "string"))
+                .append("resources", new Document("bsonType", "array"))
+                .append("connections", new Document("bsonType", "array"))
+                .append("assumptions", new Document("bsonType", "object"))
+                .append("ui", new Document("bsonType", "object"))
+                .append("meta", new Document("bsonType", "object"));
+
+        ensureTopLevelSchema(CollectionNames.CLOUD_STATES, properties, new ArrayList<>(properties.keySet()));
+    }
+
+    /**
+     * Creates {@code collectionName} with a {@code $jsonSchema} validator
+     * requiring {@code required} with the types in {@code properties}, or
+     * updates the validator via {@code collMod} if the collection exists.
+     */
+    private void ensureTopLevelSchema(String collectionName, Document properties, List<String> required) {
+        var database = mongoClient.getDatabase(databaseName);
+
         var validator = new Document("$jsonSchema", new Document()
                 .append("bsonType", "object")
                 .append("required", required)
@@ -240,23 +229,23 @@ public class StartupRunner {
 
         boolean exists = database.listCollectionNames()
                 .into(new ArrayList<>())
-                .contains(CollectionNames.NETWORK_STATES);
+                .contains(collectionName);
 
         if (!exists) {
-            database.createCollection(CollectionNames.NETWORK_STATES,
+            database.createCollection(collectionName,
                     new CreateCollectionOptions().validationOptions(
                             new ValidationOptions()
                                     .validator(validator)
                                     .validationAction(ValidationAction.ERROR)
                                     .validationLevel(ValidationLevel.MODERATE)));
         } else {
-            database.runCommand(new Document("collMod", CollectionNames.NETWORK_STATES)
+            database.runCommand(new Document("collMod", collectionName)
                     .append("validator", validator)
                     .append("validationAction", "error")
                     .append("validationLevel", "moderate"));
         }
 
-        LOG.infof("[Schema] %s → $jsonSchema validator OK", CollectionNames.NETWORK_STATES);
+        LOG.infof("[Schema] %s → $jsonSchema validator OK", collectionName);
     }
 
     /**

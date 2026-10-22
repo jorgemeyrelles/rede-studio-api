@@ -23,6 +23,9 @@ public class ProjectMutationProducer {
     @Channel("project-snapshot-out")
     Emitter<ProjectSnapshotMessage> snapshotEmitter;
 
+    @Channel("project-cloud-snapshot-out")
+    Emitter<ProjectCloudSnapshotMessage> cloudSnapshotEmitter;
+
     @Channel("project-delete-out")
     Emitter<ProjectDeleteMessage> deleteEmitter;
 
@@ -36,6 +39,10 @@ public class ProjectMutationProducer {
 
     public void publishSnapshot(ProjectSnapshotMessage message) {
         snapshotEmitter.send(message);
+    }
+
+    public void publishCloudSnapshot(ProjectCloudSnapshotMessage message) {
+        cloudSnapshotEmitter.send(message);
     }
 
     public void publishDelete(ProjectDeleteMessage message) {

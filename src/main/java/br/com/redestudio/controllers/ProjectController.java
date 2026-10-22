@@ -2,6 +2,7 @@ package br.com.redestudio.controllers;
 
 import br.com.redestudio.dtos.request.CreateProjectRequest;
 import br.com.redestudio.dtos.request.RenameProjectRequest;
+import br.com.redestudio.dtos.request.SaveCloudSnapshotRequest;
 import br.com.redestudio.dtos.request.SaveSnapshotRequest;
 import br.com.redestudio.dtos.response.ProjectResponse;
 import br.com.redestudio.dtos.response.ProjectSummaryResponse;
@@ -173,11 +174,41 @@ public class ProjectController {
                 content = @Content(schema = @Schema(implementation = ProjectSummaryResponse.class))),
         @APIResponse(responseCode = "400", description = "Validation error"),
         @APIResponse(responseCode = "401", description = "Missing or invalid JWT"),
-        @APIResponse(responseCode = "404", description = "Project not found or not owned by this user")
+        @APIResponse(responseCode = "404", description = "Project not found or not owned by this user"),
+        @APIResponse(responseCode = "409", description = "Project is a CLOUD project (use /cloud-snapshot)")
     })
     public Response saveSnapshot(@PathParam("id") String id, @Valid SaveSnapshotRequest request) {
         ProjectSummaryResponse response =
                 projectService.saveSnapshot(id, currentUserId(), request.getNetworkState());
+        return Response.ok(response).build();
+    }
+
+    /**
+     * Saves the architecture draft of a {@code CLOUD} project owned by the
+     * authenticated user — the cloud Studio's autosave.
+     *
+     * @param id      the project id
+     * @param request the new architecture draft
+     * @return HTTP 200 with the updated {@link ProjectSummaryResponse}
+     */
+    @PUT
+    @Path("/{id}/cloud-snapshot")
+    @Operation(
+            summary = "Save a cloud project draft",
+            description = "Overwrites the architecture draft of a CLOUD project owned by the authenticated user (autosave).")
+    @APIResponses({
+        @APIResponse(
+                responseCode = "200",
+                description = "Draft saved",
+                content = @Content(schema = @Schema(implementation = ProjectSummaryResponse.class))),
+        @APIResponse(responseCode = "400", description = "Validation error"),
+        @APIResponse(responseCode = "401", description = "Missing or invalid JWT"),
+        @APIResponse(responseCode = "404", description = "Project not found or not owned by this user"),
+        @APIResponse(responseCode = "409", description = "Project is not a CLOUD project")
+    })
+    public Response saveCloudSnapshot(@PathParam("id") String id, @Valid SaveCloudSnapshotRequest request) {
+        ProjectSummaryResponse response =
+                projectService.saveCloudSnapshot(id, currentUserId(), request.getCloudState());
         return Response.ok(response).build();
     }
 

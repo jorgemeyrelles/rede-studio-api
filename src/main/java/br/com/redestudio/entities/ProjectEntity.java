@@ -20,7 +20,9 @@ import java.time.Instant;
  * client-supplied field), and {@code networkStateId} points at a
  * {@code network_states} document (see {@link NetworkStateEntity}), always
  * created and deleted together with this project — never orphaned, never
- * shared between projects.
+ * shared between projects. A {@code CLOUD} project uses {@code cloudStateId}
+ * ({@code cloud_states}, see {@link CloudStateEntity}) instead: exactly one
+ * of the two ids is set, decided by {@code networkType}.
  */
 @Data
 @NoArgsConstructor
@@ -35,6 +37,9 @@ public class ProjectEntity {
 
     @BsonProperty("network_state_id")
     private ObjectId networkStateId;
+
+    @BsonProperty("cloud_state_id")
+    private ObjectId cloudStateId;
 
     @BsonProperty("name")
     private String name;
@@ -56,12 +61,14 @@ public class ProjectEntity {
      * Factory method for new project creation.
      * Sets timestamps to now.
      */
-    public static ProjectEntity create(ObjectId ownerId, String name, NetworkType networkType, ObjectId networkStateId) {
+    public static ProjectEntity create(
+            ObjectId ownerId, String name, NetworkType networkType, ObjectId networkStateId, ObjectId cloudStateId) {
         ProjectEntity project = new ProjectEntity();
         project.setOwnerId(ownerId);
         project.setName(name);
         project.setNetworkType(networkType);
         project.setNetworkStateId(networkStateId);
+        project.setCloudStateId(cloudStateId);
         project.setCreatedAt(Instant.now());
         project.setUpdatedAt(Instant.now());
         return project;

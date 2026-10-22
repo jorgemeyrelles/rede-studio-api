@@ -86,6 +86,30 @@ mp:
           type: direct
           durable: true
         default-routing-key: project.snapshot
+      project-cloud-snapshot-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: project.cloud-snapshot
+          type: direct
+          durable: true
+        default-routing-key: project.cloud-snapshot
+      cloud-price-bulk-upsert-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: cloud-price.bulk-upsert
+          type: direct
+          durable: true
+        default-routing-key: cloud-price.bulk-upsert
+      cloud-iam-bulk-upsert-out:
+        connector: smallrye-rabbitmq
+        content-type-override: application/json
+        exchange:
+          name: cloud-iam.bulk-upsert
+          type: direct
+          durable: true
+        default-routing-key: cloud-iam.bulk-upsert
       project-delete-out:
         connector: smallrye-rabbitmq
         content-type-override: application/json
@@ -167,6 +191,36 @@ mp:
           type: direct
           durable: true
         routing-keys: project.snapshot
+      project-cloud-snapshot-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: project.cloud-snapshot
+          durable: true
+        exchange:
+          name: project.cloud-snapshot
+          type: direct
+          durable: true
+        routing-keys: project.cloud-snapshot
+      cloud-price-bulk-upsert-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: cloud-price.bulk-upsert
+          durable: true
+        exchange:
+          name: cloud-price.bulk-upsert
+          type: direct
+          durable: true
+        routing-keys: cloud-price.bulk-upsert
+      cloud-iam-bulk-upsert-in:
+        connector: smallrye-rabbitmq
+        queue:
+          name: cloud-iam.bulk-upsert
+          durable: true
+        exchange:
+          name: cloud-iam.bulk-upsert
+          type: direct
+          durable: true
+        routing-keys: cloud-iam.bulk-upsert
       project-delete-in:
         connector: smallrye-rabbitmq
         queue:
@@ -249,6 +303,26 @@ app:
     google-client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
     microsoft-client-id: ${MICROSOFT_OAUTH_CLIENT_ID:}
 
+  # Banco "cloud" (sprint-cloud-aws): catálogo de preços por família de
+  # provedor, separado do banco da aplicação — mesmo cluster, outro banco.
+  cloud-pricing:
+    database: ${CLOUD_PRICING_DATABASE:rede_cloud_dev}
+    # Migration de preços (CloudPriceMigration): só o %dev liga. Com o banco
+    # de preços vazio, carrega da AWS Price List estas Regiões (+ global).
+    # Produção: comando PriceLoadCli, com aval (skill cloud).
+    migration:
+      enabled: false
+      regions: sa-east-1,us-east-1
+      include-global: true
+
+  # Migrations e seeds de dados (equipamentos, catálogo IAM do Studio Cloud)
+  # empacotados em src/main/resources/seed. Só o %dev (Docker Compose local,
+  # recriado com frequência) roda no boot, e cada seed só se a coleção
+  # estiver vazia — ver DevSeedRunner. Em produção a carga é manual, pelo
+  # endpoint bulk-upsert (PriceLoadCli --route para o catálogo IAM).
+  dev-seed:
+    enabled: false
+
 # =============================================================
 #  Profile: %dev — local Docker Compose
 # =============================================================
@@ -302,6 +376,13 @@ app:
       issuer: https://redestudio.local
       expiration-seconds: 86400
       private-key-location: file:/run/secrets/jwt/privateKey.pem
+
+    dev-seed:
+      enabled: true
+
+    cloud-pricing:
+      migration:
+        enabled: true
 
 # =============================================================
 #  Profile: %master — AWS + MongoDB Atlas
@@ -365,3 +446,6 @@ app:
       email: ${ADMIN_EMAIL}
       username: ${ADMIN_USERNAME}
       password: ${ADMIN_PASSWORD}
+
+    cloud-pricing:
+      database: ${CLOUD_PRICING_DATABASE:rede_cloud}

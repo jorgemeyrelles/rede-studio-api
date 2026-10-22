@@ -1,6 +1,8 @@
 package br.com.redestudio.dtos.response;
 
+import br.com.redestudio.dtos.CloudStatePayload;
 import br.com.redestudio.dtos.NetworkStatePayload;
+import br.com.redestudio.entities.CloudStateEntity;
 import br.com.redestudio.entities.NetworkStateEntity;
 import br.com.redestudio.entities.NetworkType;
 import br.com.redestudio.entities.ProjectEntity;
@@ -43,18 +45,24 @@ public class ProjectResponse {
     @Schema(description = "Last update timestamp (UTC)")
     private Instant updatedAt;
 
-    @Schema(description = "Full network state snapshot")
+    @Schema(description = "Full network state snapshot (null on CLOUD projects)")
     private NetworkStatePayload networkState;
 
+    @Schema(description = "Cloud architecture draft (only on CLOUD projects)")
+    private CloudStatePayload cloudState;
+
     /**
-     * Maps a {@link ProjectEntity} + its associated {@link NetworkStateEntity}
-     * to a {@link ProjectResponse}.
+     * Maps a {@link ProjectEntity} + its associated state document to a
+     * {@link ProjectResponse} — exactly one of the two states is non-null,
+     * depending on the project's {@code networkType}.
      *
      * @param project      source project entity (must not be null)
-     * @param networkState the project's associated network state entity (must not be null)
+     * @param networkState the on-prem network state ({@code null} on CLOUD projects)
+     * @param cloudState   the cloud draft ({@code null} on non-CLOUD projects)
      * @return a new {@link ProjectResponse} instance
      */
-    public static ProjectResponse from(ProjectEntity project, NetworkStateEntity networkState) {
+    public static ProjectResponse from(
+            ProjectEntity project, NetworkStateEntity networkState, CloudStateEntity cloudState) {
         return new ProjectResponse(
                 project.getId().toHexString(),
                 project.getName(),
@@ -65,7 +73,8 @@ public class ProjectResponse {
                 project.getNetworkType() != null ? project.getNetworkType() : NetworkType.ON_PREMISE,
                 project.getCreatedAt(),
                 project.getUpdatedAt(),
-                networkState.toPayload());
+                networkState != null ? networkState.toPayload() : null,
+                cloudState != null ? cloudState.toPayload() : null);
     }
 
     public ProjectSummaryResponse toSummary() {

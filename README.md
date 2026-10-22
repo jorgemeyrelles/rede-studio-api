@@ -87,6 +87,13 @@ stack trace: um único `GlobalExceptionHandler` converte tudo num
 | `POST`/`GET` | `/api/projects` | `USER`, `ADMIN` | `ProjectController` |
 | `GET`/`PATCH`/`DELETE` | `/api/projects/{id}` | `USER`, `ADMIN` | `ProjectController` |
 | `PUT` | `/api/projects/{id}/snapshot` | `USER`, `ADMIN` | `ProjectController` |
+| `PUT` | `/api/projects/{id}/cloud-snapshot` | `USER`, `ADMIN` | `ProjectController` (só projetos `CLOUD`) |
+| `GET` | `/api/cloud-prices/meta` | `USER`, `ADMIN` | `CloudPriceController` |
+| `GET` | `/api/cloud-prices/catalog?provider=&region=` | `USER`, `ADMIN` | `CloudPriceController` |
+| `GET` | `/api/cloud-prices?provider=&region=&resourceType=` | `USER`, `ADMIN` | `CloudPriceController` |
+| `POST` | `/api/cloud-prices/bulk-upsert` | `ADMIN` | `CloudPriceController` (carga: migration local `CloudPriceMigration`; produção `PriceLoadCli prices`) |
+| `GET` | `/api/cloud-catalog/iam?provider=` | `USER`, `ADMIN` | `CloudCatalogController` |
+| `POST` | `/api/cloud-catalog/iam/bulk-upsert` | `ADMIN` | `CloudCatalogController` (carga: seed `DevSeedRunner`; produção `PriceLoadCli upload`) |
 
 ### Modelo de autenticação
 

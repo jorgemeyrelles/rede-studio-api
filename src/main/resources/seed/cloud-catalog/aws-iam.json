@@ -1,0 +1,752 @@
+{
+ "items": [
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.administrator-access",
+   "name": {
+    "pt": "Acesso total",
+    "en": "Full access",
+    "es": "Acceso total"
+   },
+   "description": {
+    "pt": "Acesso irrestrito a todos os serviços e recursos.",
+    "en": "Unrestricted access to every service and resource.",
+    "es": "Acceso sin restricciones a todos los servicios y recursos."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/AdministratorAccess",
+   "order": 1
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.power-user-access",
+   "name": {
+    "pt": "Usuário avançado",
+    "en": "Power user",
+    "es": "Usuario avanzado"
+   },
+   "description": {
+    "pt": "Tudo, exceto gerenciar usuários, grupos e organização.",
+    "en": "Everything except managing users, groups and the organization.",
+    "es": "Todo, excepto gestionar usuarios, grupos y organización."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/PowerUserAccess",
+   "order": 2
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.read-only-access",
+   "name": {
+    "pt": "Somente leitura",
+    "en": "Read only",
+    "es": "Solo lectura"
+   },
+   "description": {
+    "pt": "Leitura de todos os serviços, inclusive dados.",
+    "en": "Read access to every service, including data.",
+    "es": "Lectura de todos los servicios, incluidos los datos."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/ReadOnlyAccess",
+   "order": 3
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.view-only-access",
+   "name": {
+    "pt": "Somente visualização",
+    "en": "View only",
+    "es": "Solo visualización"
+   },
+   "description": {
+    "pt": "Lista recursos e configurações, sem ler dados.",
+    "en": "Lists resources and settings, without reading data.",
+    "es": "Lista recursos y configuraciones, sin leer datos."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/job-function/ViewOnlyAccess",
+   "order": 4
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.billing",
+   "name": {
+    "pt": "Faturamento",
+    "en": "Billing",
+    "es": "Facturación"
+   },
+   "description": {
+    "pt": "Faturas, pagamentos, orçamentos e custos.",
+    "en": "Invoices, payments, budgets and costs.",
+    "es": "Facturas, pagos, presupuestos y costos."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/job-function/Billing",
+   "order": 5
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.database-administrator",
+   "name": {
+    "pt": "Administrador de banco de dados",
+    "en": "Database administrator",
+    "es": "Administrador de base de datos"
+   },
+   "description": {
+    "pt": "RDS, DynamoDB, ElastiCache e afins.",
+    "en": "RDS, DynamoDB, ElastiCache and related.",
+    "es": "RDS, DynamoDB, ElastiCache y afines."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/job-function/DatabaseAdministrator",
+   "order": 6
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.network-administrator",
+   "name": {
+    "pt": "Administrador de rede",
+    "en": "Network administrator",
+    "es": "Administrador de red"
+   },
+   "description": {
+    "pt": "VPC, subnets, rotas, gateways, DNS e balanceadores.",
+    "en": "VPC, subnets, routes, gateways, DNS and load balancers.",
+    "es": "VPC, subnets, rutas, gateways, DNS y balanceadores."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/job-function/NetworkAdministrator",
+   "order": 7
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.system-administrator",
+   "name": {
+    "pt": "Administrador de sistemas",
+    "en": "System administrator",
+    "es": "Administrador de sistemas"
+   },
+   "description": {
+    "pt": "EC2, Auto Scaling, monitoramento e operação.",
+    "en": "EC2, Auto Scaling, monitoring and operations.",
+    "es": "EC2, Auto Scaling, monitoreo y operación."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/job-function/SystemAdministrator",
+   "order": 8
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.security-audit",
+   "name": {
+    "pt": "Auditoria de segurança",
+    "en": "Security audit",
+    "es": "Auditoría de seguridad"
+   },
+   "description": {
+    "pt": "Leitura das configurações de segurança para auditoria.",
+    "en": "Read security configuration for auditing.",
+    "es": "Lectura de la configuración de seguridad para auditoría."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/SecurityAudit",
+   "order": 9
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.data-scientist",
+   "name": {
+    "pt": "Cientista de dados",
+    "en": "Data scientist",
+    "es": "Científico de datos"
+   },
+   "description": {
+    "pt": "SageMaker, Athena, Glue e análise de dados.",
+    "en": "SageMaker, Athena, Glue and data analysis.",
+    "es": "SageMaker, Athena, Glue y análisis de datos."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/job-function/DataScientist",
+   "order": 10
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.support-user",
+   "name": {
+    "pt": "Suporte",
+    "en": "Support",
+    "es": "Soporte"
+   },
+   "description": {
+    "pt": "Abre e acompanha chamados no AWS Support.",
+    "en": "Opens and tracks AWS Support cases.",
+    "es": "Abre y sigue casos en AWS Support."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/job-function/SupportUser",
+   "order": 11
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.iam-user-change-password",
+   "name": {
+    "pt": "Trocar a própria senha",
+    "en": "Change own password",
+    "es": "Cambiar la propia contraseña"
+   },
+   "description": {
+    "pt": "Permite ao usuário trocar a própria senha do console.",
+    "en": "Lets users change their own console password.",
+    "es": "Permite al usuario cambiar su propia contraseña de consola."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/IAMUserChangePassword",
+   "order": 12
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.ssm-managed-instance-core",
+   "name": {
+    "pt": "Gerenciamento via SSM",
+    "en": "SSM management",
+    "es": "Gestión vía SSM"
+   },
+   "description": {
+    "pt": "Instância gerenciável pelo Systems Manager (sem SSH aberto).",
+    "en": "Instance managed by Systems Manager (no open SSH).",
+    "es": "Instancia gestionable por Systems Manager (sin SSH abierto)."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+   "order": 13
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.cloudwatch-agent-server",
+   "name": {
+    "pt": "Agente do CloudWatch",
+    "en": "CloudWatch agent",
+    "es": "Agente de CloudWatch"
+   },
+   "description": {
+    "pt": "Envia métricas e logs do servidor ao CloudWatch.",
+    "en": "Sends server metrics and logs to CloudWatch.",
+    "es": "Envía métricas y logs del servidor a CloudWatch."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+   "order": 14
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.s3-read-only",
+   "name": {
+    "pt": "S3 somente leitura",
+    "en": "S3 read only",
+    "es": "S3 solo lectura"
+   },
+   "description": {
+    "pt": "Leitura de buckets e objetos do S3.",
+    "en": "Read S3 buckets and objects.",
+    "es": "Lectura de buckets y objetos de S3."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+   "order": 15
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.s3-full-access",
+   "name": {
+    "pt": "S3 acesso total",
+    "en": "S3 full access",
+    "es": "S3 acceso total"
+   },
+   "description": {
+    "pt": "Leitura e escrita em todos os buckets do S3.",
+    "en": "Read and write every S3 bucket.",
+    "es": "Lectura y escritura en todos los buckets de S3."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+   "order": 16
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.lambda-basic-execution",
+   "name": {
+    "pt": "Execução básica do Lambda",
+    "en": "Lambda basic execution",
+    "es": "Ejecución básica de Lambda"
+   },
+   "description": {
+    "pt": "Grava os logs da função no CloudWatch.",
+    "en": "Writes function logs to CloudWatch.",
+    "es": "Escribe los logs de la función en CloudWatch."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+   "order": 17
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.lambda-vpc-access",
+   "name": {
+    "pt": "Lambda em VPC",
+    "en": "Lambda in a VPC",
+    "es": "Lambda en VPC"
+   },
+   "description": {
+    "pt": "Cria interfaces de rede para a função rodar dentro da VPC.",
+    "en": "Creates network interfaces so the function runs inside a VPC.",
+    "es": "Crea interfaces de red para que la función corra dentro de la VPC."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+   "order": 18
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.ecs-task-execution",
+   "name": {
+    "pt": "Execução de tarefa ECS",
+    "en": "ECS task execution",
+    "es": "Ejecución de tarea ECS"
+   },
+   "description": {
+    "pt": "Baixa imagens do ECR e grava logs da tarefa.",
+    "en": "Pulls ECR images and writes task logs.",
+    "es": "Descarga imágenes de ECR y escribe logs de la tarea."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+   "order": 19
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.rds-enhanced-monitoring",
+   "name": {
+    "pt": "Monitoramento avançado do RDS",
+    "en": "RDS enhanced monitoring",
+    "es": "Monitoreo avanzado de RDS"
+   },
+   "description": {
+    "pt": "Publica métricas do sistema operacional do RDS.",
+    "en": "Publishes RDS operating system metrics.",
+    "es": "Publica métricas del sistema operativo de RDS."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole",
+   "order": 20
+  },
+  {
+   "provider": "AWS",
+   "kind": "POLICY",
+   "key": "aws.policy.backup-service",
+   "name": {
+    "pt": "Backup da AWS",
+    "en": "AWS Backup",
+    "es": "AWS Backup"
+   },
+   "description": {
+    "pt": "Permite ao AWS Backup criar cópias dos recursos.",
+    "en": "Lets AWS Backup create resource backups.",
+    "es": "Permite a AWS Backup crear copias de los recursos."
+   },
+   "policyArn": "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup",
+   "order": 21
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.administrators",
+   "name": {
+    "pt": "Administradores",
+    "en": "Administrators",
+    "es": "Administradores"
+   },
+   "description": {
+    "pt": "Acesso total à conta. Use para poucos usuários, com MFA.",
+    "en": "Full account access. Keep it to a few users, with MFA.",
+    "es": "Acceso total a la cuenta. Para pocos usuarios, con MFA."
+   },
+   "iamName": "Administrators",
+   "policies": [
+    "aws.policy.administrator-access"
+   ],
+   "order": 1
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.power-users",
+   "name": {
+    "pt": "Usuários avançados",
+    "en": "Power users",
+    "es": "Usuarios avanzados"
+   },
+   "description": {
+    "pt": "Constroem tudo, mas não gerenciam identidades.",
+    "en": "Build everything but cannot manage identities.",
+    "es": "Construyen todo, pero no gestionan identidades."
+   },
+   "iamName": "PowerUsers",
+   "policies": [
+    "aws.policy.power-user-access"
+   ],
+   "order": 2
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.network-admins",
+   "name": {
+    "pt": "Administradores de rede",
+    "en": "Network admins",
+    "es": "Administradores de red"
+   },
+   "description": {
+    "pt": "Cuidam de VPC, rotas, gateways, DNS e balanceadores.",
+    "en": "Own VPC, routes, gateways, DNS and load balancers.",
+    "es": "Gestionan VPC, rutas, gateways, DNS y balanceadores."
+   },
+   "iamName": "NetworkAdmins",
+   "policies": [
+    "aws.policy.network-administrator"
+   ],
+   "order": 3
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.system-admins",
+   "name": {
+    "pt": "Administradores de sistemas",
+    "en": "System admins",
+    "es": "Administradores de sistemas"
+   },
+   "description": {
+    "pt": "Operam instâncias, escalonamento e monitoramento.",
+    "en": "Operate instances, scaling and monitoring.",
+    "es": "Operan instancias, escalado y monitoreo."
+   },
+   "iamName": "SystemAdmins",
+   "policies": [
+    "aws.policy.system-administrator"
+   ],
+   "order": 4
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.database-admins",
+   "name": {
+    "pt": "Administradores de banco de dados",
+    "en": "Database admins",
+    "es": "Administradores de base de datos"
+   },
+   "description": {
+    "pt": "Operam bancos gerenciados (RDS, DynamoDB...).",
+    "en": "Operate managed databases (RDS, DynamoDB...).",
+    "es": "Operan bases gestionadas (RDS, DynamoDB...)."
+   },
+   "iamName": "DatabaseAdmins",
+   "policies": [
+    "aws.policy.database-administrator"
+   ],
+   "order": 5
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.developers",
+   "name": {
+    "pt": "Desenvolvedores",
+    "en": "Developers",
+    "es": "Desarrolladores"
+   },
+   "description": {
+    "pt": "Criam e testam recursos de aplicação.",
+    "en": "Create and test application resources.",
+    "es": "Crean y prueban recursos de aplicación."
+   },
+   "iamName": "Developers",
+   "policies": [
+    "aws.policy.power-user-access",
+    "aws.policy.iam-user-change-password"
+   ],
+   "order": 6
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.security-auditors",
+   "name": {
+    "pt": "Auditores de segurança",
+    "en": "Security auditors",
+    "es": "Auditores de seguridad"
+   },
+   "description": {
+    "pt": "Revisam a configuração de segurança, sem alterar nada.",
+    "en": "Review security configuration without changing anything.",
+    "es": "Revisan la configuración de seguridad sin cambiar nada."
+   },
+   "iamName": "SecurityAuditors",
+   "policies": [
+    "aws.policy.security-audit",
+    "aws.policy.view-only-access"
+   ],
+   "order": 7
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.read-only",
+   "name": {
+    "pt": "Somente leitura",
+    "en": "Read only",
+    "es": "Solo lectura"
+   },
+   "description": {
+    "pt": "Consultam recursos e dados, sem alterar.",
+    "en": "Read resources and data, without changes.",
+    "es": "Consultan recursos y datos, sin cambios."
+   },
+   "iamName": "ReadOnly",
+   "policies": [
+    "aws.policy.read-only-access"
+   ],
+   "order": 8
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.view-only",
+   "name": {
+    "pt": "Somente visualização",
+    "en": "View only",
+    "es": "Solo visualización"
+   },
+   "description": {
+    "pt": "Veem a configuração, sem acesso aos dados.",
+    "en": "See configuration, without data access.",
+    "es": "Ven la configuración, sin acceso a los datos."
+   },
+   "iamName": "ViewOnly",
+   "policies": [
+    "aws.policy.view-only-access"
+   ],
+   "order": 9
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.billing",
+   "name": {
+    "pt": "Financeiro",
+    "en": "Billing",
+    "es": "Finanzas"
+   },
+   "description": {
+    "pt": "Acompanham faturas, orçamentos e custos.",
+    "en": "Track invoices, budgets and costs.",
+    "es": "Siguen facturas, presupuestos y costos."
+   },
+   "iamName": "Billing",
+   "policies": [
+    "aws.policy.billing"
+   ],
+   "order": 10
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.data-scientists",
+   "name": {
+    "pt": "Cientistas de dados",
+    "en": "Data scientists",
+    "es": "Científicos de datos"
+   },
+   "description": {
+    "pt": "Analisam dados e treinam modelos.",
+    "en": "Analyze data and train models.",
+    "es": "Analizan datos y entrenan modelos."
+   },
+   "iamName": "DataScientists",
+   "policies": [
+    "aws.policy.data-scientist"
+   ],
+   "order": 11
+  },
+  {
+   "provider": "AWS",
+   "kind": "GROUP",
+   "key": "aws.group.support",
+   "name": {
+    "pt": "Suporte",
+    "en": "Support",
+    "es": "Soporte"
+   },
+   "description": {
+    "pt": "Abrem e acompanham chamados com a AWS.",
+    "en": "Open and track AWS support cases.",
+    "es": "Abren y siguen casos con AWS."
+   },
+   "iamName": "Support",
+   "policies": [
+    "aws.policy.support-user"
+   ],
+   "order": 12
+  },
+  {
+   "provider": "AWS",
+   "kind": "ROLE",
+   "key": "aws.role.ec2-ssm",
+   "name": {
+    "pt": "EC2 gerenciada (SSM + CloudWatch)",
+    "en": "Managed EC2 (SSM + CloudWatch)",
+    "es": "EC2 gestionada (SSM + CloudWatch)"
+   },
+   "description": {
+    "pt": "Perfil de instância: acesso pelo Session Manager e métricas no CloudWatch.",
+    "en": "Instance profile: Session Manager access and CloudWatch metrics.",
+    "es": "Perfil de instancia: acceso por Session Manager y métricas en CloudWatch."
+   },
+   "iamName": "ec2-ssm-role",
+   "trustedService": "ec2.amazonaws.com",
+   "policies": [
+    "aws.policy.ssm-managed-instance-core",
+    "aws.policy.cloudwatch-agent-server"
+   ],
+   "order": 1
+  },
+  {
+   "provider": "AWS",
+   "kind": "ROLE",
+   "key": "aws.role.ec2-s3-read",
+   "name": {
+    "pt": "EC2 com leitura no S3",
+    "en": "EC2 with S3 read",
+    "es": "EC2 con lectura en S3"
+   },
+   "description": {
+    "pt": "Instância que lê artefatos e configurações do S3.",
+    "en": "Instance that reads artifacts and configuration from S3.",
+    "es": "Instancia que lee artefactos y configuraciones de S3."
+   },
+   "iamName": "ec2-s3-read-role",
+   "trustedService": "ec2.amazonaws.com",
+   "policies": [
+    "aws.policy.ssm-managed-instance-core",
+    "aws.policy.s3-read-only"
+   ],
+   "order": 2
+  },
+  {
+   "provider": "AWS",
+   "kind": "ROLE",
+   "key": "aws.role.lambda-basic",
+   "name": {
+    "pt": "Lambda básica",
+    "en": "Basic Lambda",
+    "es": "Lambda básica"
+   },
+   "description": {
+    "pt": "Função que só grava logs.",
+    "en": "Function that only writes logs.",
+    "es": "Función que solo escribe logs."
+   },
+   "iamName": "lambda-basic-role",
+   "trustedService": "lambda.amazonaws.com",
+   "policies": [
+    "aws.policy.lambda-basic-execution"
+   ],
+   "order": 3
+  },
+  {
+   "provider": "AWS",
+   "kind": "ROLE",
+   "key": "aws.role.lambda-vpc",
+   "name": {
+    "pt": "Lambda dentro da VPC",
+    "en": "Lambda inside a VPC",
+    "es": "Lambda dentro de la VPC"
+   },
+   "description": {
+    "pt": "Função que acessa recursos privados da VPC.",
+    "en": "Function that reaches private VPC resources.",
+    "es": "Función que accede a recursos privados de la VPC."
+   },
+   "iamName": "lambda-vpc-role",
+   "trustedService": "lambda.amazonaws.com",
+   "policies": [
+    "aws.policy.lambda-vpc-access"
+   ],
+   "order": 4
+  },
+  {
+   "provider": "AWS",
+   "kind": "ROLE",
+   "key": "aws.role.ecs-task-execution",
+   "name": {
+    "pt": "Execução de tarefas ECS",
+    "en": "ECS task execution",
+    "es": "Ejecución de tareas ECS"
+   },
+   "description": {
+    "pt": "Usada pelo ECS para baixar imagens e gravar logs.",
+    "en": "Used by ECS to pull images and write logs.",
+    "es": "Usada por ECS para descargar imágenes y escribir logs."
+   },
+   "iamName": "ecs-task-execution-role",
+   "trustedService": "ecs-tasks.amazonaws.com",
+   "policies": [
+    "aws.policy.ecs-task-execution"
+   ],
+   "order": 5
+  },
+  {
+   "provider": "AWS",
+   "kind": "ROLE",
+   "key": "aws.role.rds-monitoring",
+   "name": {
+    "pt": "Monitoramento do RDS",
+    "en": "RDS monitoring",
+    "es": "Monitoreo de RDS"
+   },
+   "description": {
+    "pt": "Habilita o monitoramento avançado das instâncias RDS.",
+    "en": "Enables enhanced monitoring of RDS instances.",
+    "es": "Habilita el monitoreo avanzado de las instancias RDS."
+   },
+   "iamName": "rds-monitoring-role",
+   "trustedService": "monitoring.rds.amazonaws.com",
+   "policies": [
+    "aws.policy.rds-enhanced-monitoring"
+   ],
+   "order": 6
+  },
+  {
+   "provider": "AWS",
+   "kind": "ROLE",
+   "key": "aws.role.backup",
+   "name": {
+    "pt": "AWS Backup",
+    "en": "AWS Backup",
+    "es": "AWS Backup"
+   },
+   "description": {
+    "pt": "Executa os planos de backup dos recursos.",
+    "en": "Runs resource backup plans.",
+    "es": "Ejecuta los planes de backup de los recursos."
+   },
+   "iamName": "backup-role",
+   "trustedService": "backup.amazonaws.com",
+   "policies": [
+    "aws.policy.backup-service"
+   ],
+   "order": 7
+  }
+ ]
+}

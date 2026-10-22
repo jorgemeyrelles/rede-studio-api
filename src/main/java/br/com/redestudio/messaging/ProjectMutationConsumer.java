@@ -1,8 +1,10 @@
 package br.com.redestudio.messaging;
 
+import br.com.redestudio.entities.CloudStateEntity;
 import br.com.redestudio.entities.NetworkStateEntity;
 import br.com.redestudio.entities.NetworkType;
 import br.com.redestudio.entities.ProjectEntity;
+import br.com.redestudio.repositories.CloudStateRepository;
 import br.com.redestudio.repositories.NetworkStateRepository;
 import br.com.redestudio.repositories.ProjectRepository;
 import io.vertx.core.json.JsonObject;
@@ -35,16 +37,33 @@ public class ProjectMutationConsumer {
     @Inject
     NetworkStateRepository networkStateRepository;
 
+    @Inject
+    CloudStateRepository cloudStateRepository;
+
     @Incoming("project-create-in")
     public void onCreate(JsonObject payload) {
         ProjectCreateMessage message = payload.mapTo(ProjectCreateMessage.class);
 
-        NetworkStateEntity networkState = NetworkStateEntity.fromPayload(message.networkState());
-        networkState.setId(new ObjectId(message.networkStateId()));
-        networkStateRepository.persist(networkState);
+        // Só um dos dois estados vem preenchido (decidido pelo networkType no
+        // ProjectService) — persiste o que veio, referencia só ele.
+        ObjectId networkStateId = null;
+        if (message.networkState() != null) {
+            NetworkStateEntity networkState = NetworkStateEntity.fromPayload(message.networkState());
+            networkState.setId(new ObjectId(message.networkStateId()));
+            networkStateRepository.persist(networkState);
+            networkStateId = networkState.getId();
+        }
+
+        ObjectId cloudStateId = null;
+        if (message.cloudState() != null) {
+            CloudStateEntity cloudState = CloudStateEntity.fromPayload(message.cloudState());
+            cloudState.setId(new ObjectId(message.cloudStateId()));
+            cloudStateRepository.persist(cloudState);
+            cloudStateId = cloudState.getId();
+        }
 
         ProjectEntity project = ProjectEntity.create(
-                new ObjectId(message.ownerId()), message.name(), message.networkType(), networkState.getId());
+                new ObjectId(message.ownerId()), message.name(), message.networkType(), networkStateId, cloudStateId);
         project.setId(new ObjectId(message.projectId()));
         projectRepository.persist(project);
     }
@@ -94,6 +113,35 @@ public class ProjectMutationConsumer {
         projectRepository.update(project);
     }
 
+    @Incoming("project-cloud-snapshot-in")
+    public void onCloudSnapshot(JsonObject payload) {
+        ProjectCloudSnapshotMessage message = payload.mapTo(ProjectCloudSnapshotMessage.class);
+
+        ProjectEntity project = projectRepository.findById(new ObjectId(message.projectId()));
+        if (project == null) {
+            LOG.warnf("project.cloud-snapshot: project %s not found (already deleted?)", message.projectId());
+            return;
+        }
+
+        CloudStateEntity cloudState = project.getCloudStateId() != null
+                ? cloudStateRepository.findById(project.getCloudStateId())
+                : null;
+        if (cloudState == null) {
+            // Mesma auto-cura do onSnapshot: o snapshot sempre traz o rascunho completo.
+            LOG.warnf("project.cloud-snapshot: cloudState %s missing for project %s — recreating",
+                    project.getCloudStateId(), project.getId());
+            cloudState = CloudStateEntity.fromPayload(message.cloudState());
+            cloudStateRepository.persist(cloudState);
+            project.setCloudStateId(cloudState.getId());
+        } else {
+            cloudState.applyPayload(message.cloudState());
+            cloudStateRepository.update(cloudState);
+        }
+
+        project.setUpdatedAt(Instant.now());
+        projectRepository.update(project);
+    }
+
     /**
      * Sprint tiers — projeto anterior a esta sprint não tem {@code networkType}
      * no Mongo; em vez de uma migração em lote, qualquer `rename`/`snapshot`
@@ -115,7 +163,12 @@ public class ProjectMutationConsumer {
         if (project == null) {
             return;
         }
-        networkStateRepository.deleteById(project.getNetworkStateId());
+        if (project.getNetworkStateId() != null) {
+            networkStateRepository.deleteById(project.getNetworkStateId());
+        }
+        if (project.getCloudStateId() != null) {
+            cloudStateRepository.deleteById(project.getCloudStateId());
+        }
         projectRepository.deleteById(project.getId());
     }
 }

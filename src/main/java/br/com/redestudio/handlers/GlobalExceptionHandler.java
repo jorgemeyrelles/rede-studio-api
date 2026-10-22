@@ -3,6 +3,7 @@ package br.com.redestudio.handlers;
 import br.com.redestudio.dtos.response.ErrorResponse;
 import br.com.redestudio.exceptions.InvalidCredentialsException;
 import br.com.redestudio.exceptions.OAuthVerificationException;
+import br.com.redestudio.exceptions.ProjectTypeMismatchException;
 import br.com.redestudio.exceptions.UnauthorizedException;
 import br.com.redestudio.exceptions.UserAlreadyExistsException;
 import jakarta.ws.rs.NotAllowedException;
@@ -25,6 +26,7 @@ import org.jboss.logging.Logger;
  * <p>Mapped exceptions:
  * <ul>
  *   <li>{@link UserAlreadyExistsException} → 409 Conflict</li>
+ *   <li>{@link ProjectTypeMismatchException} → 409 Conflict</li>
  *   <li>{@link InvalidCredentialsException} → 401 Unauthorized</li>
  *   <li>{@link UnauthorizedException} → 401 Unauthorized</li>
  *   <li>{@link OAuthVerificationException} → 401 Unauthorized</li>
@@ -47,6 +49,10 @@ public class GlobalExceptionHandler implements ExceptionMapper<Exception> {
         String path = uriInfo != null ? uriInfo.getPath() : "unknown";
 
         if (exception instanceof UserAlreadyExistsException ex) {
+            return build(Response.Status.CONFLICT, "CONFLICT", ex.getMessage(), path);
+        }
+
+        if (exception instanceof ProjectTypeMismatchException ex) {
             return build(Response.Status.CONFLICT, "CONFLICT", ex.getMessage(), path);
         }
 

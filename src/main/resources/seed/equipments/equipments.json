@@ -1,0 +1,300 @@
+{
+ "items": [
+  {
+   "brand": "Aruba/HPE",
+   "model": "Aruba CX 6100 24G 4SFP+ (JL678A)",
+   "function": [
+    "switch"
+   ],
+   "price": {
+    "approxPriceUsd": 1958.84,
+    "approxPriceBrl": 10088.03,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Aruba/HPE",
+   "model": "Instant On AP22",
+   "function": [
+    "access point"
+   ],
+   "price": {
+    "approxPriceUsd": 137.49,
+    "approxPriceBrl": 708.1,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Cisco",
+   "model": "Catalyst 8300-1N1S-4T2X",
+   "function": [
+    "roteador"
+   ],
+   "price": {
+    "approxPriceUsd": 4697.8,
+    "approxPriceBrl": 24203.67,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Cisco",
+   "model": "Catalyst 9120AXE",
+   "function": [
+    "access point"
+   ],
+   "price": {
+    "approxPriceUsd": 999.0,
+    "approxPriceBrl": 5144.85,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Cisco",
+   "model": "Catalyst WS-C3650-48TS-L",
+   "function": [
+    "switch"
+   ],
+   "price": {
+    "approxPriceUsd": 1200.0,
+    "approxPriceBrl": 6180.0,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Cisco",
+   "model": "Firepower 2110 (FPR2110-NGFW-K9)",
+   "function": [
+    "firewall"
+   ],
+   "price": {
+    "approxPriceUsd": 1650.0,
+    "approxPriceBrl": 8497.5,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Fortinet",
+   "model": "FortiGate 100F",
+   "function": [
+    "firewall",
+    "roteador"
+   ],
+   "price": {
+    "approxPriceUsd": 1338.68,
+    "approxPriceBrl": 6894.2,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Fortinet",
+   "model": "FortiGate 200F",
+   "function": [
+    "firewall"
+   ],
+   "price": {
+    "approxPriceUsd": 2399.0,
+    "approxPriceBrl": 12354.85,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Fortinet",
+   "model": "FortiGate 60F",
+   "function": [
+    "firewall",
+    "roteador"
+   ],
+   "price": {
+    "approxPriceUsd": 536.68,
+    "approxPriceBrl": 2764.9,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Fortinet",
+   "model": "FortiSwitch 248E-FPOE",
+   "function": [
+    "switch"
+   ],
+   "price": {
+    "approxPriceUsd": 774.9,
+    "approxPriceBrl": 3990.74,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Huawei",
+   "model": "AirEngine AP7060DN",
+   "function": [
+    "access point"
+   ],
+   "price": {
+    "approxPriceUsd": 1000.0,
+    "approxPriceBrl": 5150.0,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Huawei",
+   "model": "CloudEngine S5735-L8T4S-A1",
+   "function": [
+    "switch"
+   ],
+   "price": {
+    "approxPriceUsd": 231.0,
+    "approxPriceBrl": 1189.65,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Huawei",
+   "model": "NetEngine AR6300",
+   "function": [
+    "roteador"
+   ],
+   "price": {
+    "approxPriceUsd": 4283.0,
+    "approxPriceBrl": 22057.45,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Juniper",
+   "model": "EX2300-24T",
+   "function": [
+    "switch"
+   ],
+   "price": {
+    "approxPriceUsd": 1597.93,
+    "approxPriceBrl": 8229.34,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Juniper",
+   "model": "SRX320",
+   "function": [
+    "firewall",
+    "roteador"
+   ],
+   "price": {
+    "approxPriceUsd": 1213.0,
+    "approxPriceBrl": 6246.95,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "MikroTik",
+   "model": "CCR2004-1G-12S+2XS",
+   "function": [
+    "roteador"
+   ],
+   "price": {
+    "approxPriceUsd": 475.47,
+    "approxPriceBrl": 2448.67,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "MikroTik",
+   "model": "CRS326-24G-2S+RM",
+   "function": [
+    "switch"
+   ],
+   "price": {
+    "approxPriceUsd": 194.0,
+    "approxPriceBrl": 999.1,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "MikroTik",
+   "model": "hAP ax3 (C53UiG+5HPaxD2HPaxD)",
+   "function": [
+    "roteador",
+    "access point"
+   ],
+   "price": {
+    "approxPriceUsd": 252.35,
+    "approxPriceBrl": 1299.6,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "TP-Link",
+   "model": "JetStream TL-SG3428",
+   "function": [
+    "switch"
+   ],
+   "price": {
+    "approxPriceUsd": 199.99,
+    "approxPriceBrl": 1029.95,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "TP-Link",
+   "model": "Omada EAP670",
+   "function": [
+    "access point"
+   ],
+   "price": {
+    "approxPriceUsd": 149.99,
+    "approxPriceBrl": 772.45,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "TP-Link",
+   "model": "Omada ER8411",
+   "function": [
+    "roteador",
+    "firewall",
+    "vpn"
+   ],
+   "price": {
+    "approxPriceUsd": 412.25,
+    "approxPriceBrl": 2123.09,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Ubiquiti",
+   "model": "UniFi 6 Long-Range (U6-LR)",
+   "function": [
+    "access point"
+   ],
+   "price": {
+    "approxPriceUsd": 179.0,
+    "approxPriceBrl": 921.85,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Ubiquiti",
+   "model": "UniFi Dream Machine Pro (UDM-Pro)",
+   "function": [
+    "roteador",
+    "firewall",
+    "gateway"
+   ],
+   "price": {
+    "approxPriceUsd": 379.0,
+    "approxPriceBrl": 8966.8,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  },
+  {
+   "brand": "Ubiquiti",
+   "model": "UniFi Switch 24 PoE (USW-24-POE)",
+   "function": [
+    "switch"
+   ],
+   "price": {
+    "approxPriceUsd": 379.0,
+    "approxPriceBrl": 1951.85,
+    "scannedAt": "2026-09-16T00:00:00Z"
+   }
+  }
+ ]
+}

@@ -1,16 +1,22 @@
 package br.com.redestudio.services;
 
+import br.com.redestudio.dtos.CloudStatePayload;
 import br.com.redestudio.dtos.NetworkStatePayload;
 import br.com.redestudio.dtos.request.CreateProjectRequest;
 import br.com.redestudio.dtos.response.ProjectResponse;
 import br.com.redestudio.dtos.response.ProjectSummaryResponse;
+import br.com.redestudio.entities.CloudStateEntity;
 import br.com.redestudio.entities.NetworkStateEntity;
+import br.com.redestudio.entities.NetworkType;
 import br.com.redestudio.entities.ProjectEntity;
+import br.com.redestudio.exceptions.ProjectTypeMismatchException;
+import br.com.redestudio.messaging.ProjectCloudSnapshotMessage;
 import br.com.redestudio.messaging.ProjectCreateMessage;
 import br.com.redestudio.messaging.ProjectDeleteMessage;
 import br.com.redestudio.messaging.ProjectMutationProducer;
 import br.com.redestudio.messaging.ProjectRenameMessage;
 import br.com.redestudio.messaging.ProjectSnapshotMessage;
+import br.com.redestudio.repositories.CloudStateRepository;
 import br.com.redestudio.repositories.NetworkStateRepository;
 import br.com.redestudio.repositories.ProjectRepository;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -47,6 +53,9 @@ public class ProjectService {
 
     @Inject
     NetworkStateRepository networkStateRepository;
+
+    @Inject
+    CloudStateRepository cloudStateRepository;
 
     @Inject
     ProjectCacheService cacheService;
@@ -96,17 +105,22 @@ public class ProjectService {
     }
 
     /**
-     * Creates a new project. Pre-generates both the project and network
-     * state ids so the Redis entry written here and the MongoDB documents
-     * eventually written by the consumer always agree on the same ids.
+     * Creates a new project. Pre-generates the project id and the id of its
+     * state document — {@code cloud_states} for a {@code CLOUD} project,
+     * {@code network_states} otherwise (the request validator already
+     * guarantees the matching payload is the one present) — so the Redis
+     * entry written here and the MongoDB documents eventually written by
+     * the consumer always agree on the same ids.
      *
      * @param ownerId the owner's Mongo {@code _id} (JWT {@code uid} claim)
-     * @param request name and initial network state snapshot
+     * @param request name, network type and initial state
      * @return the created project
      */
     public ProjectResponse create(ObjectId ownerId, CreateProjectRequest request) {
         ObjectId projectId = new ObjectId();
-        ObjectId networkStateId = new ObjectId();
+        boolean cloud = request.getNetworkType() == NetworkType.CLOUD;
+        String networkStateId = cloud ? null : new ObjectId().toHexString();
+        String cloudStateId = cloud ? new ObjectId().toHexString() : null;
         Instant now = Instant.now();
 
         ProjectResponse response = new ProjectResponse(
@@ -116,18 +130,21 @@ public class ProjectService {
                 request.getNetworkType(),
                 now,
                 now,
-                request.getNetworkState());
+                request.getNetworkState(),
+                request.getCloudState());
 
         cacheService.putProject(response);
         prependToOwnerList(ownerId, response.toSummary());
 
         producer.publishCreate(new ProjectCreateMessage(
                 projectId.toHexString(),
-                networkStateId.toHexString(),
+                networkStateId,
                 ownerId.toHexString(),
                 request.getName(),
                 request.getNetworkType(),
-                request.getNetworkState()));
+                request.getNetworkState(),
+                cloudStateId,
+                request.getCloudState()));
 
         return response;
     }
@@ -145,7 +162,7 @@ public class ProjectService {
         ProjectResponse current = getOwned(id, ownerId);
         ProjectResponse updated = new ProjectResponse(
                 current.getId(), name, current.getOwnerId(), current.getNetworkType(),
-                current.getCreatedAt(), Instant.now(), current.getNetworkState());
+                current.getCreatedAt(), Instant.now(), current.getNetworkState(), current.getCloudState());
 
         cacheService.putProject(updated);
         replaceInOwnerList(ownerId, updated.toSummary());
@@ -162,17 +179,48 @@ public class ProjectService {
      * @param networkState the new network state snapshot
      * @return the updated project summary
      * @throws NotFoundException if the project doesn't exist or isn't owned by this user
+     * @throws ProjectTypeMismatchException if the project is a {@code CLOUD} project
      */
     public ProjectSummaryResponse saveSnapshot(String id, ObjectId ownerId, NetworkStatePayload networkState) {
         ProjectResponse current = getOwned(id, ownerId);
+        if (current.getNetworkType() == NetworkType.CLOUD) {
+            throw new ProjectTypeMismatchException("CLOUD projects are saved via /cloud-snapshot: " + id);
+        }
         ProjectResponse updated = new ProjectResponse(
                 current.getId(), current.getName(), current.getOwnerId(), current.getNetworkType(),
-                current.getCreatedAt(), Instant.now(), networkState);
+                current.getCreatedAt(), Instant.now(), networkState, null);
 
         cacheService.putProject(updated);
         replaceInOwnerList(ownerId, updated.toSummary());
 
         producer.publishSnapshot(new ProjectSnapshotMessage(id, ownerId.toHexString(), networkState));
+        return updated.toSummary();
+    }
+
+    /**
+     * Saves the full architecture draft of a {@code CLOUD} project owned by
+     * the given user — the cloud counterpart of {@link #saveSnapshot}.
+     *
+     * @param id         the project id
+     * @param ownerId    the owner's Mongo {@code _id} (JWT {@code uid} claim)
+     * @param cloudState the new architecture draft
+     * @return the updated project summary
+     * @throws NotFoundException if the project doesn't exist or isn't owned by this user
+     * @throws ProjectTypeMismatchException if the project is not a {@code CLOUD} project
+     */
+    public ProjectSummaryResponse saveCloudSnapshot(String id, ObjectId ownerId, CloudStatePayload cloudState) {
+        ProjectResponse current = getOwned(id, ownerId);
+        if (current.getNetworkType() != NetworkType.CLOUD) {
+            throw new ProjectTypeMismatchException("Only CLOUD projects accept a cloud snapshot: " + id);
+        }
+        ProjectResponse updated = new ProjectResponse(
+                current.getId(), current.getName(), current.getOwnerId(), current.getNetworkType(),
+                current.getCreatedAt(), Instant.now(), null, cloudState);
+
+        cacheService.putProject(updated);
+        replaceInOwnerList(ownerId, updated.toSummary());
+
+        producer.publishCloudSnapshot(new ProjectCloudSnapshotMessage(id, ownerId.toHexString(), cloudState));
         return updated.toSummary();
     }
 
@@ -209,17 +257,30 @@ public class ProjectService {
 
     /**
      * Loads a project directly from MongoDB (cache miss path), joining
-     * {@code projects} with its {@code network_states} document.
+     * {@code projects} with its state document — {@code cloud_states} for a
+     * {@code CLOUD} project, {@code network_states} otherwise.
      *
      * @throws NotFoundException if the project doesn't exist, isn't owned by
      *                            this user, or (integrity error — should
      *                            never happen, create/delete always keep
-     *                            both entities together) its network state
+     *                            both entities together) its state
      *                            document is missing
      */
     private ProjectResponse loadFromMongo(String id, ObjectId ownerId) {
         ProjectEntity project = projectRepository.findByIdAndOwnerId(id, ownerId)
                 .orElseThrow(() -> new NotFoundException("Project not found: " + id));
+
+        if (project.getNetworkType() == NetworkType.CLOUD) {
+            CloudStateEntity cloudState = project.getCloudStateId() != null
+                    ? cloudStateRepository.findById(project.getCloudStateId())
+                    : null;
+            if (cloudState == null) {
+                LOG.errorf("Integrity error: project %s references missing cloudState %s",
+                        id, project.getCloudStateId());
+                throw new NotFoundException("Project data is corrupted: " + id);
+            }
+            return ProjectResponse.from(project, null, cloudState);
+        }
 
         NetworkStateEntity networkState = networkStateRepository.findById(project.getNetworkStateId());
         if (networkState == null) {
@@ -228,6 +289,6 @@ public class ProjectService {
             throw new NotFoundException("Project data is corrupted: " + id);
         }
 
-        return ProjectResponse.from(project, networkState);
+        return ProjectResponse.from(project, networkState, null);
     }
 }
